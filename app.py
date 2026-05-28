@@ -529,32 +529,27 @@ def call_external_ai(prompt: str, local_answer: str) -> str | None:
                 {
                     "role": "system",
                     "content": (
-                        "You are explaining a dataset to someone with no technical background — "
-                        "think of them as a business owner or manager who just wants to understand "
-                        "their data in plain English.\n\n"
-                        "Rules you must follow:\n"
-                        "• Always respond in 4 to 6 bullet points (use the • symbol).\n"
-                        "• Use simple, everyday language — no jargon, no technical terms.\n"
-                        "• Each bullet must say something directly about the ACTUAL DATA "
-                        "(columns, values, patterns, trends) — not about models or algorithms.\n"
-                        "• Make each point practical and actionable: what does this mean for the business?\n"
-                        "• Keep each bullet to one clear sentence.\n"
-                        "• Do NOT use words like: model, algorithm, ML, training, accuracy, feature, "
-                        "vector, classifier, hyperparameter, or any other technical term."
+                        "You explain data to non-technical business people. "
+                        "FORMAT RULES — follow exactly:\n"
+                        "- Write exactly 4 bullet points, each on its own line.\n"
+                        "- Start every bullet with '- ' (dash space).\n"
+                        "- Each bullet: maximum 12 words. One fact only. No sub-clauses.\n"
+                        "- Plain English only. Zero jargon.\n"
+                        "- No intro sentence, no conclusion, no headers — just the 4 bullets.\n"
+                        "- Do not use: model, algorithm, accuracy, training, feature, classifier."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        f"The user asked: \"{prompt}\"\n\n"
-                        f"Here is the actual data information:\n{dataset_context_for_llm(prompt)}\n\n"
-                        "Now write 4 to 6 plain-English bullet points explaining what this data "
-                        "shows and what it means, based directly on the data above."
+                        f"Question asked: \"{prompt}\"\n\n"
+                        f"Data facts:\n{dataset_context_for_llm(prompt)}\n\n"
+                        "Write 4 short bullets about what this data shows."
                     ),
                 },
             ],
-            temperature=0.5,
-            max_tokens=320,
+            temperature=0.3,
+            max_tokens=180,
         )
         return response.choices[0].message.content.strip()
     except Exception:
