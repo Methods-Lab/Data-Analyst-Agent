@@ -38,7 +38,7 @@ from abduction import try_bayesian_abduce
 
 # ---------------------------------------------------------------------------
 # Groq API key — used in background for data structuring and suggestions.
-# Never exposed to the user in the UI.
+# Set GROQ_API_KEY in Railway environment variables (or .env for local dev).
 # ---------------------------------------------------------------------------
 _GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 _GROQ_MODEL   = "llama-3.3-70b-versatile"
@@ -514,9 +514,12 @@ def dataset_context_for_llm(prompt: str) -> str:
 
 def call_external_ai(prompt: str, local_answer: str) -> str | None:
     """
-    Enrich the local ML answer with Groq suggestions (background, hidden from user).
-    Falls back silently to None so the local answer is shown instead.
+    Ask Groq for an ADDITIONAL explanation that appears after the local ML answer.
+    Never replaces the ML output — always additive.
+    Returns None silently on failure so the ML answer is still shown alone.
     """
+    if not _GROQ_API_KEY:
+        return None
     try:
         from groq import Groq
         client   = Groq(api_key=_GROQ_API_KEY)
@@ -526,22 +529,27 @@ def call_external_ai(prompt: str, local_answer: str) -> str | None:
                 {
                     "role": "system",
                     "content": (
-                        "You are a senior data analyst. The user's dataset has been processed by an "
-                        "offline ML model. Enrich the local ML answer with concise, specific analyst "
-                        "insights grounded in the data context. Keep your response under 180 words."
+                        "You are a senior data analyst providing an AI explanation that sits "
+                        "BELOW an offline ML model's answer. Your job is to explain WHY the ML "
+                        "result makes sense, add business context, highlight what to act on, or "
+                        "flag anything the ML answer doesn't cover. "
+                        "Be direct and concise — 80 to 130 words. "
+                        "Do NOT repeat numbers or facts already stated in the ML answer. "
+                        "Do NOT start with 'The ML model says' or similar phrases."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        f"Question: {prompt}\n\n"
-                        f"Dataset context:\n{dataset_context_for_llm(prompt)}\n\n"
-                        f"Local ML answer: {local_answer}"
+                        f"User question: {prompt}\n\n"
+                        f"Dataset context (from the trained model):\n{dataset_context_for_llm(prompt)}\n\n"
+                        f"ML model's answer (already shown to user — do not repeat it):\n{local_answer}\n\n"
+                        "Write your additional AI explanation now:"
                     ),
                 },
             ],
-            temperature=0.3,
-            max_tokens=300,
+            temperature=0.4,
+            max_tokens=220,
         )
         return response.choices[0].message.content.strip()
     except Exception:
@@ -700,8 +708,15 @@ def answer_with_data(prompt: str) -> str:
 
 def generate_response(prompt: str) -> str:
     local_answer = answer_with_data(prompt)
-    external_answer = call_external_ai(prompt, local_answer)
-    return external_answer or local_answer
+    ai_explanation = call_external_ai(prompt, local_answer)
+    if ai_explanation:
+        return (
+            f"{local_answer}\n\n"
+            "---\n"
+            "**AI Explanation**\n\n"
+            f"{ai_explanation}"
+        )
+    return local_answer
 
 
 def train_agent(df: pd.DataFrame, target_request: str, tree_depth: int, n_estimators: int) -> None:
