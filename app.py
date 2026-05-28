@@ -452,6 +452,19 @@ div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) [data-
     color: white !important;
 }
 
+/* Hidden marker that flags the chat column */
+.chat-card-marker { display: none; }
+
+/* Right chat column gets a white card surface so it stands out */
+[data-testid="stColumn"]:has(> div > .chat-card-marker),
+[data-testid="column"]:has(> div > .chat-card-marker) {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 18px !important;
+    padding: 16px !important;
+    box-shadow: var(--shadow);
+}
+
 @media (max-width: 900px) {
     .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1554,6 +1567,8 @@ with workspace_col:
 # CHAT PANEL (right) — full vertical column with input at its bottom
 # ----------------------------------------------------------------------------
 with chat_col:
+    # Hidden marker — CSS uses :has() to style only the column containing it
+    st.markdown('<div class="chat-card-marker"></div>', unsafe_allow_html=True)
     st.markdown(
         """
 <div class="chat-header">
