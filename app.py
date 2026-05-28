@@ -512,44 +512,54 @@ def dataset_context_for_llm(prompt: str) -> str:
     return "\n".join(context)
 
 
-def call_external_ai(prompt: str, local_answer: str) -> str | None:
+def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
     """
-    Plain-language bullet-point explanation grounded in the ACTUAL DATA,
-    written for a non-technical reader. Always additive — never replaces the ML output.
-    Returns None silently on failure.
+    Groq acts as the PRIMARY responder, answering the user's EXACT question
+    using the actual uploaded data as context.  Returns None on failure so
+    the local ML answer is shown as fallback.
     """
     if not _GROQ_API_KEY:
         return None
     try:
         from groq import Groq
+        has_data = st.session_state.df_raw is not None
+
+        if has_data:
+            data_context = dataset_context_for_llm(prompt)
+            system_content = (
+                "You are an AI data analyst assistant with full access to the user's uploaded dataset. "
+                "Your job is to answer the user's EXACT question — never give a generic response.\n\n"
+                "Rules:\n"
+                "- Conversational messages (hi, how are you, thanks, etc.): reply briefly in 1-2 sentences.\n"
+                "- Data questions: answer specifically using the actual column names and values provided.\n"
+                "- Use plain English only — no jargon, no technical terms.\n"
+                "- If listing facts: use '- ' bullets on separate lines (max 5 bullets, max 15 words each).\n"
+                "- If a simple direct answer: write 2-3 clear sentences.\n"
+                "- Never say 'based on the ML model' or 'the model says'. Speak directly.\n"
+                "- Keep the total response under 130 words."
+            )
+            user_content = (
+                f"User's question: \"{prompt}\"\n\n"
+                f"Dataset information:\n{data_context}\n\n"
+                "Answer the user's question specifically using the dataset information above."
+            )
+        else:
+            system_content = (
+                "You are a friendly AI data analyst. No dataset is loaded yet. "
+                "Respond naturally in 1-2 sentences. "
+                "Encourage the user to upload a CSV or Excel file to begin analysis."
+            )
+            user_content = f"User said: \"{prompt}\""
+
         client = Groq(api_key=_GROQ_API_KEY)
         response = client.chat.completions.create(
             model=_GROQ_MODEL,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You explain data to non-technical business people. "
-                        "FORMAT RULES — follow exactly:\n"
-                        "- Write exactly 4 bullet points, each on its own line.\n"
-                        "- Start every bullet with '- ' (dash space).\n"
-                        "- Each bullet: maximum 12 words. One fact only. No sub-clauses.\n"
-                        "- Plain English only. Zero jargon.\n"
-                        "- No intro sentence, no conclusion, no headers — just the 4 bullets.\n"
-                        "- Do not use: model, algorithm, accuracy, training, feature, classifier."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Question asked: \"{prompt}\"\n\n"
-                        f"Data facts:\n{dataset_context_for_llm(prompt)}\n\n"
-                        "Write 4 short bullets about what this data shows."
-                    ),
-                },
+                {"role": "system", "content": system_content},
+                {"role": "user",   "content": user_content},
             ],
-            temperature=0.3,
-            max_tokens=180,
+            temperature=0.4,
+            max_tokens=260,
         )
         return response.choices[0].message.content.strip()
     except Exception:
@@ -708,14 +718,27 @@ def answer_with_data(prompt: str) -> str:
 
 def generate_response(prompt: str) -> str:
     local_answer = answer_with_data(prompt)
-    ai_explanation = call_external_ai(prompt, local_answer)
-    if ai_explanation:
-        return (
-            f"{local_answer}\n\n"
-            "---\n"
-            "**AI Explanation**\n\n"
-            f"{ai_explanation}"
-        )
+    groq_answer  = call_external_ai(prompt, local_answer)
+
+    low = prompt.lower()
+    # For predict/deduce queries the ML result (prediction + confidence) is
+    # the core output — show it first, then Groq explains it.
+    is_predict_query = any(w in low for w in ["predict", "classify", "if "]) and \
+                       st.session_state.train_result is not None
+
+    if groq_answer:
+        if is_predict_query:
+            # ML result first, AI explanation below
+            return (
+                f"{local_answer}\n\n"
+                "---\n"
+                "**AI Explanation**\n\n"
+                f"{groq_answer}"
+            )
+        # For everything else Groq IS the answer — no boilerplate ML text
+        return groq_answer
+
+    # Groq unavailable — fall back to local ML answer
     return local_answer
 
 
