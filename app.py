@@ -1249,35 +1249,23 @@ if train_clicked:
 # Status header
 # ---------------------------------------------------------------------------
 trained     = st.session_state.train_result is not None
-status      = "Model trained" if trained else "Ready — upload a file to begin"
-target_text = st.session_state.target_col or "auto-detected after training"
-data_text   = (
+file_title  = st.session_state.get("source_filename") or "No file loaded yet"
+target_text = st.session_state.target_col or "auto-detect"
+rows_text   = (
     f"{st.session_state.data_profile['rows']:,} rows"
     if st.session_state.data_profile
-    else "no data loaded"
+    else "no data"
 )
-
-st.markdown(
-    f"""
-<section class="app-head">
-    <div class="app-head-row">
-        <div class="app-title">Data Analyst Agent</div>
-        <div class="status-row">
-            <div class="status-pill">{status}</div>
-            <div class="status-pill">Target: {target_text}</div>
-            <div class="status-pill">{data_text}</div>
-            <div class="status-pill">Offline ML</div>
-        </div>
-    </div>
-</section>
-""",
-    unsafe_allow_html=True,
+cols_text   = (
+    f"{st.session_state.data_profile['columns']} columns"
+    if st.session_state.data_profile
+    else "0 columns"
 )
-
-
-if trained:
-    render_metrics()
-
+status_chip = (
+    '<div class="status-pill" style="background:#E3EEDF;color:#4F7E5C;border-color:#C8DEC6;">● Model ready</div>'
+    if trained
+    else '<div class="status-pill">Ready — upload a file</div>'
+)
 
 if not st.session_state.chat:
     st.session_state.chat = [
@@ -1290,14 +1278,60 @@ if not st.session_state.chat:
         }
     ]
 
+# ============================================================================
 # Two-column layout: workspace (left) + chat panel (right)
+# ============================================================================
 workspace_col, chat_col = st.columns([1.7, 1], gap="medium")
 
-# =========================================================================
+# ----------------------------------------------------------------------------
 # WORKSPACE (left)
-# =========================================================================
+# ----------------------------------------------------------------------------
 with workspace_col:
-    # Drivers chart (Most Impactful Columns)
+
+    # Header card
+    st.markdown(
+        f"""
+<section class="app-head">
+    <div class="app-head-row">
+        <div>
+            <div class="app-title">{file_title}</div>
+            <div style="font-size:11px;color:#6F6A60;margin-top:2px;">
+                {rows_text} · {cols_text} · target: {target_text}
+            </div>
+        </div>
+        <div class="status-row">
+            {status_chip}
+            <div class="status-pill">Offline ML</div>
+        </div>
+    </div>
+</section>
+""",
+        unsafe_allow_html=True,
+    )
+
+    # Metrics — always shown (placeholders when empty)
+    profile = st.session_state.data_profile or {}
+    result  = st.session_state.train_result or {}
+    cv_mean = result.get("cv_mean_accuracy", result.get("rf_accuracy", 0))
+    cv_std  = result.get("cv_std", 0.0)
+    cv_label = (f"{cv_mean:.0%}" if cv_mean else "—")
+    rows_val = f"{profile.get('rows', 0):,}" if profile else "—"
+    cols_val = f"{profile.get('columns', 0):,}" if profile else "—"
+    rules_val = f"{result.get('n_rules', 0):,}" if result else "—"
+    shap_badge = "SHAP ✓" if result.get("shap_available") else "Importance"
+    st.markdown(
+        f"""
+<div class="metric-grid">
+    <div class="metric coral"><div class="ico">↗</div><span class="value">{rows_val}</span><span class="label">Rows Learned</span></div>
+    <div class="metric sage"><div class="ico">◆</div><span class="value">{cols_val}</span><span class="label">Signals</span></div>
+    <div class="metric honey"><div class="ico">✦</div><span class="value">{cv_label}</span><span class="label">CV Accuracy</span></div>
+    <div class="metric neutral"><div class="ico">∎</div><span class="value">{rules_val}</span><span class="label">Rules · {shap_badge}</span></div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    # Most impactful columns chart — or empty-state placeholder
     if st.session_state.df_raw is not None and Path("feature_importances.pkl").exists():
         try:
             import plotly.express as _px
@@ -1330,8 +1364,28 @@ with workspace_col:
                 st.caption(f"Ranking method: **{imp_label}** — what drives the predictions most.")
         except Exception:
             pass
+    else:
+        st.markdown(
+            """
+<div style="background:#FFFFFF;border:1px solid #ECE4D6;border-radius:16px;
+            padding:46px 24px;text-align:center;box-shadow:0 1px 2px rgba(43,42,38,.04),0 8px 24px rgba(43,42,38,.06);">
+    <div style="width:56px;height:56px;border-radius:14px;margin:0 auto 14px;
+                background:linear-gradient(135deg,#FCE5DC,#F8EBCF);
+                display:flex;align-items:center;justify-content:center;
+                font-size:24px;color:#E07856;">◆</div>
+    <div style="font-size:15px;font-weight:700;color:#2B2A26;margin-bottom:5px;">
+        Your insights will appear here
+    </div>
+    <div style="font-size:12px;color:#6F6A60;max-width:380px;margin:0 auto;line-height:1.5;">
+        Upload a CSV or Excel file from the sidebar, click <b>Train agent</b>,
+        and you'll see the most impactful columns, charts, and predictions appear in this space.
+    </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
-    # Pinned action row (with Visualize)
+    # Pinned action row
     st.markdown("#### Pinned")
     pin_prompts = ["Summarize", "Top drivers", "Missing values", "Why high?", "Predict", "Visualize"]
     pin_map = {
@@ -1362,9 +1416,9 @@ with workspace_col:
             with tabs[1]:
                 st.json(st.session_state.data_profile or {})
 
-# =========================================================================
-# CHAT PANEL (right)
-# =========================================================================
+# ----------------------------------------------------------------------------
+# CHAT PANEL (right) — full vertical column with input at its bottom
+# ----------------------------------------------------------------------------
 with chat_col:
     st.markdown(
         """
@@ -1385,9 +1439,19 @@ with chat_col:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-# Chat input — stays at page level (Streamlit pins it to bottom)
-prompt = st.chat_input("Ask anything about your data…")
-if prompt:
-    st.session_state.chat.append({"role": "user", "content": prompt})
-    st.session_state.chat.append({"role": "assistant", "content": generate_response(prompt)})
-    st.rerun()
+    # Input INSIDE the chat column (form-based so it lives in the column,
+    # not floated at page bottom)
+    with st.form("chat_form", clear_on_submit=True, border=False):
+        col_in, col_send = st.columns([8, 1], gap="small")
+        with col_in:
+            _typed = st.text_input(
+                "Message", label_visibility="collapsed",
+                placeholder="Ask anything about your data…",
+            )
+        with col_send:
+            _send = st.form_submit_button("➤", use_container_width=True)
+
+    if _send and _typed.strip():
+        st.session_state.chat.append({"role": "user", "content": _typed.strip()})
+        st.session_state.chat.append({"role": "assistant", "content": generate_response(_typed.strip())})
+        st.rerun()
