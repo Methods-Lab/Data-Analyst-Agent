@@ -1166,12 +1166,13 @@ def visualize_dialog() -> None:
         )
 
     elif graph_type == "Scatter Plot (top correlation)":
-        corr = numeric_df.corr().abs()
-        np.fill_diagonal(corr.values, 0)
+        corr_arr = numeric_df.corr().abs().to_numpy().copy()   # writable copy
+        np.fill_diagonal(corr_arr, 0)
+        corr = pd.DataFrame(corr_arr, index=numeric_df.columns, columns=numeric_df.columns)
         # Most correlated pair
-        max_val   = corr.values.max()
+        max_val      = float(corr.values.max())
         x_col, y_col = corr.stack().idxmax()
-        signed    = numeric_df.corr().loc[x_col, y_col]
+        signed       = numeric_df.corr().loc[x_col, y_col]
         fig = px.scatter(
             numeric_df, x=x_col, y=y_col,
             title=f"{x_col} vs {y_col} — correlation {signed:+.2f}",
