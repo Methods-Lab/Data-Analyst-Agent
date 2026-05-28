@@ -292,15 +292,16 @@ div[data-testid="stChatMessage"] {
 
 def init_state() -> None:
     defaults = {
-        "df_raw":        None,
-        "df_clean":      None,
-        "train_result":  None,
-        "target_col":    None,
-        "chat":          [],
-        "text_corpus":   None,
-        "text_vectors":  None,
+        "df_raw":          None,
+        "df_clean":        None,
+        "train_result":    None,
+        "target_col":      None,
+        "chat":            [],
+        "text_corpus":     None,
+        "text_vectors":    None,
         "text_vectorizer": None,
-        "data_profile":  None,
+        "data_profile":    None,
+        "source_filename": None,   # keeps the uploaded file name for AI context
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -477,39 +478,79 @@ def compact_table(items: dict[str, Any], limit: int = 8) -> str:
 
 
 def dataset_context_for_llm(prompt: str) -> str:
-    profile = st.session_state.data_profile or {}
+    """
+    Build a rich, data-grounded context string for Groq so it can answer
+    ANY question about the uploaded dataset — not just keyword-matched ones.
+    Includes actual row samples, per-column breakdowns, real percentages,
+    and feature importance rankings.
+    """
+    df     = st.session_state.df_raw
     result = st.session_state.train_result or {}
-    context = [
-        f"Rows: {profile.get('rows', 0)}",
-        f"Columns: {profile.get('columns', 0)}",
-        f"Target: {st.session_state.target_col or 'none'}",
-        f"Numeric columns: {', '.join(profile.get('numeric', [])[:30])}",
-        f"Categorical/text columns: {', '.join(profile.get('categorical', [])[:30])}",
-        f"Target distribution: {profile.get('target_distribution', {})}",
-        f"Missing values: {profile.get('missing', {})}",
-    ]
+    target = st.session_state.target_col
 
-    if result:
-        context.append(f"Random Forest accuracy: {result.get('rf_accuracy', 0):.3f}")
-        context.append(f"Decision Tree accuracy: {result.get('dt_accuracy', 0):.3f}")
+    if df is None:
+        return "No dataset loaded yet."
 
+    lines: list[str] = []
+
+    # File identity
+    fname = st.session_state.get("source_filename") or "uploaded file"
+    lines.append(f"File: {fname}")
+    lines.append(f"Size: {len(df):,} rows × {len(df.columns)} columns")
+    lines.append(f"All columns: {list(df.columns)}")
+
+    # Per-column breakdown with real counts and percentages
+    lines.append("\nColumn details:")
+    for col in df.columns:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            s = df[col].describe()
+            lines.append(
+                f"  '{col}' (numeric) — "
+                f"min={s['min']:.2f}, max={s['max']:.2f}, "
+                f"avg={s['mean']:.2f}, {df[col].nunique()} unique values"
+            )
+        else:
+            vc  = df[col].value_counts()
+            pct = (vc / len(df) * 100).round(1)
+            top = {str(k): f"{v:,} rows ({pct[k]}%)" for k, v in vc.head(6).items()}
+            lines.append(f"  '{col}' (text/category) — {df[col].nunique()} unique, top values: {top}")
+
+    # Target distribution with percentages
+    if target and target in df.columns:
+        vc  = df[target].value_counts()
+        pct = (vc / len(df) * 100).round(1)
+        dist = {str(k): f"{v:,} ({pct[k]}%)" for k, v in vc.items()}
+        lines.append(f"\nPrediction target '{target}': {dist}")
+
+    # Most impactful columns ranked (SHAP or permutation importance)
     if Path("feature_importances.pkl").exists():
         try:
-            imp = trainer.load_importances()["importances"]
-            ranked = sorted(imp.items(), key=lambda item: item[1], reverse=True)[:12]
-            context.append(f"Top feature importances: {ranked}")
+            imp_data = trainer.load_importances()
+            imp      = imp_data.get("shap_importances") or imp_data.get("importances", {})
+            if imp:
+                ranked   = sorted(imp.items(), key=lambda x: x[1], reverse=True)
+                top_cols = [f"#{i+1}: {c}" for i, (c, _) in enumerate(ranked[:8])]
+                lines.append(f"\nMost impactful columns (ranked): {', '.join(top_cols)}")
         except Exception:
             pass
 
-    retrieval = answer_with_text_retrieval(prompt)
-    if retrieval:
-        context.append(f"Relevant text evidence:\n{retrieval}")
+    # Model accuracy
+    if result:
+        lines.append(f"Prediction accuracy: {result.get('rf_accuracy', 0):.1%}")
+        cv = result.get("cv_mean_accuracy")
+        if cv:
+            lines.append(f"Cross-validation accuracy: {cv:.1%}")
 
-    if st.session_state.df_raw is not None:
-        preview = st.session_state.df_raw.head(8).to_dict("records")
-        context.append(f"Data preview: {preview}")
+    # Missing values
+    missing = df.isna().sum()
+    missing_d = {c: int(v) for c, v in missing[missing > 0].items()}
+    lines.append(f"Missing values: {missing_d if missing_d else 'none'}")
 
-    return "\n".join(context)
+    # Actual data sample so Groq can see real values
+    sample_n = min(20, len(df))
+    lines.append(f"\nSample data ({sample_n} rows):\n{df.head(sample_n).to_csv(index=False)}")
+
+    return "\n".join(lines)
 
 
 def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
@@ -527,27 +568,27 @@ def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
         if has_data:
             data_context = dataset_context_for_llm(prompt)
             system_content = (
-                "You are an AI data analyst assistant with full access to the user's uploaded dataset. "
-                "Your job is to answer the user's EXACT question — never give a generic response.\n\n"
-                "Rules:\n"
-                "- Conversational messages (hi, how are you, thanks, etc.): reply briefly in 1-2 sentences.\n"
-                "- Data questions: answer specifically using the actual column names and values provided.\n"
-                "- Use plain English only — no jargon, no technical terms.\n"
-                "- If listing facts: use '- ' bullets on separate lines (max 5 bullets, max 15 words each).\n"
-                "- If a simple direct answer: write 2-3 clear sentences.\n"
-                "- Never say 'based on the ML model' or 'the model says'. Speak directly.\n"
-                "- Keep the total response under 130 words."
+                "You are an AI data analyst with FULL access to the user's uploaded dataset. "
+                "Answer ANY question — simple or complex — about this data.\n\n"
+                "RULES:\n"
+                "1. Answer the user's EXACT question. Never be generic.\n"
+                "2. Use the actual column names, real values, and real percentages from the data.\n"
+                "3. Simple questions (file name, row count, column list): one clear sentence.\n"
+                "4. Analysis questions (patterns, most impacting column, percentages): "
+                "use '- ' bullet points, each on its own line, max 20 words per bullet.\n"
+                "5. Conversational (hi, thanks, how are you): one natural sentence.\n"
+                "6. Plain English only — no jargon. Speak like explaining to a business owner.\n"
+                "7. For percentages or counts: compute from the data and state the exact number.\n"
+                "8. Maximum 160 words total."
             )
             user_content = (
                 f"User's question: \"{prompt}\"\n\n"
-                f"Dataset information:\n{data_context}\n\n"
-                "Answer the user's question specifically using the dataset information above."
+                f"Full dataset (use this to answer):\n{data_context}"
             )
         else:
             system_content = (
-                "You are a friendly AI data analyst. No dataset is loaded yet. "
-                "Respond naturally in 1-2 sentences. "
-                "Encourage the user to upload a CSV or Excel file to begin analysis."
+                "You are a friendly AI data analyst. No dataset is uploaded yet. "
+                "Reply conversationally in 1-2 sentences and invite the user to upload a file."
             )
             user_content = f"User said: \"{prompt}\""
 
@@ -559,7 +600,7 @@ def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.4,
-            max_tokens=260,
+            max_tokens=300,
         )
         return response.choices[0].message.content.strip()
     except Exception:
@@ -716,36 +757,43 @@ def answer_with_data(prompt: str) -> str:
     )
 
 
-_GENERIC_ML_FALLBACKS = (
-    "Here is the analyst read from the active data",
-    "I can help as a data analyst right now",
-)
-
 def generate_response(prompt: str) -> str:
-    local_answer = answer_with_data(prompt)
-    groq_answer  = call_external_ai(prompt, local_answer)
+    """
+    Route every message through Groq as the primary AI agent.
 
-    # Detect when the ML engine returned a generic fallback instead of a
-    # meaningful data answer (keyword didn't match anything specific).
-    ml_is_generic = any(local_answer.startswith(f) for f in _GENERIC_ML_FALLBACKS)
+    Groq gets the full data context (actual rows, column breakdowns, percentages)
+    and answers the user's exact question — no hardcoded keyword matching.
 
-    if groq_answer:
-        if ml_is_generic:
-            # ML had nothing useful to say — Groq answers the question directly
-            # (covers: conversational messages, open-ended questions, no-data state)
-            return groq_answer
-        else:
-            # ML gave a meaningful answer (summary, drivers, prediction, etc.)
-            # Show it first, then the labeled AI Explanation below
+    The only exception: explicit predict queries (e.g. "predict if qty=5")
+    show the ML model's computed prediction first, then Groq explains it.
+    """
+    low = prompt.lower()
+
+    # Detect explicit predict-with-values query
+    is_predict = (
+        any(w in low for w in ["predict if", "classify if", "predict if "])
+        and st.session_state.train_result is not None
+    )
+
+    if is_predict:
+        ml_prediction = answer_with_data(prompt)   # ML computes the actual prediction
+        groq_answer   = call_external_ai(prompt, ml_prediction)
+        if groq_answer:
             return (
-                f"{local_answer}\n\n"
+                f"{ml_prediction}\n\n"
                 "---\n"
                 "**AI Explanation**\n\n"
                 f"{groq_answer}"
             )
+        return ml_prediction
 
-    # Groq unavailable — show ML answer only
-    return local_answer
+    # All other questions — Groq answers directly from the actual data
+    groq_answer = call_external_ai(prompt, "")
+    if groq_answer:
+        return groq_answer
+
+    # Groq unavailable — fall back to ML keyword matching
+    return answer_with_data(prompt)
 
 
 def train_agent(df: pd.DataFrame, target_request: str, tree_depth: int, n_estimators: int) -> None:
@@ -928,14 +976,14 @@ if train_clicked:
                     st.error("Upload a file first.")
                     st.stop()
 
+                st.session_state.source_filename = uploaded.name   # store for AI context
+
                 _is_excel = uploaded.name.lower().endswith((".xlsx", ".xls"))
                 if _is_excel:
-                    # Read the chosen sheet → clean in-memory (Excel can't be streamed)
                     _sheet = selected_sheet if selected_sheet is not None else 0
                     _raw = read_excel_sheet(uploaded, _sheet)
                     raw_df, _rules, _ = _gc.clean_dataframe(_raw, api_key=_GROQ_API_KEY)
                 else:
-                    # CSV → write to temp, use chunked streaming reader
                     _tmp_path = tempfile.mktemp(suffix=".csv")
                     try:
                         with open(_tmp_path, "wb") as _f:
@@ -957,6 +1005,8 @@ if train_clicked:
                     st.error(f"File not found: {_lp}")
                     st.stop()
 
+                st.session_state.source_filename = _lp.name        # store for AI context
+
                 if _lp.suffix.lower() in (".xlsx", ".xls"):
                     _sheet = selected_sheet if selected_sheet is not None else 0
                     _raw = read_excel_sheet(_lp, _sheet)
@@ -968,6 +1018,7 @@ if train_clicked:
                 target_request = _rules.get("target") or target_request
 
             else:  # Generate demo data
+                st.session_state.source_filename = "synthetic_sales_data.csv"
                 raw_df = dl.generate_synthetic_data(n_rows=rows)
 
             train_agent(raw_df, target_request, tree_depth, n_estimators)
