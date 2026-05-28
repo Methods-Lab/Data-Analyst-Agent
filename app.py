@@ -388,6 +388,70 @@ h1, h2, h3, h4 {
 /* Pinned section heading */
 h4 { font-size: .85rem !important; color: var(--muted) !important; text-transform: uppercase; letter-spacing: .08em; }
 
+/* Pinned buttons styled as rounded pills with a colored dot before text */
+.pin-row .stButton > button {
+    border-radius: 999px !important;
+    padding: 8px 16px !important;
+    font-size: 12.5px !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--ink) !important;
+    position: relative;
+    padding-left: 26px !important;
+    text-align: left;
+}
+.pin-row .stButton > button::before {
+    content: "";
+    position: absolute;
+    left: 13px; top: 50%;
+    transform: translateY(-50%);
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--coral);
+}
+.pin-row .stButton:nth-of-type(1) > button::before { background: var(--coral); }
+.pin-row .stButton:nth-of-type(2) > button::before { background: var(--sage); }
+.pin-row .stButton:nth-of-type(3) > button::before { background: var(--honey); }
+.pin-row .stButton:nth-of-type(4) > button::before { background: var(--coral); }
+.pin-row .stButton:nth-of-type(5) > button::before { background: var(--sage); }
+.pin-row .stButton:nth-of-type(6) > button::before { background: var(--honey); }
+
+/* Chat: AI message bubble = white card, user bubble = coral right-aligned */
+div[data-testid="stChatMessageContent"] {
+    color: var(--ink) !important;
+}
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
+    flex-direction: row-reverse !important;
+    text-align: left !important;
+}
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) [data-testid="stChatMessageContent"] {
+    background: var(--coral) !important;
+    border-radius: 13px 13px 4px 13px !important;
+    padding: 10px 13px !important;
+}
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) [data-testid="stChatMessageContent"] * {
+    color: #FFFFFF !important;
+}
+
+/* Quick-chip suggestions below input */
+.quick-chips {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;
+}
+
+/* Inline send button (➤) inside chat form */
+[data-testid="stForm"] .stButton > button {
+    background: var(--coral) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    box-shadow: 0 3px 8px rgba(224,120,86,.3);
+}
+[data-testid="stForm"] .stButton > button:hover {
+    background: var(--coral-dark) !important;
+    color: white !important;
+}
+
 @media (max-width: 900px) {
     .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -408,11 +472,28 @@ def init_state() -> None:
         "text_vectors":    None,
         "text_vectorizer": None,
         "data_profile":    None,
-        "source_filename": None,   # keeps the uploaded file name for AI context
+        "source_filename": None,
+        "source_sheet_count": 1,
+        "trained_at":      None,
+        "recent_files":    [],     # list of dicts: {name, size_kb, ext, trained}
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+
+def add_recent_file(name: str, size_bytes: int) -> None:
+    """Track uploaded/trained files for the Recent Files sidebar list."""
+    ext = name.split(".")[-1].lower() if "." in name else "csv"
+    entry = {
+        "name":    name,
+        "size_kb": round(size_bytes / 1024, 1),
+        "ext":     ext.upper()[:3],
+        "trained": True,
+    }
+    existing = st.session_state.recent_files
+    existing = [f for f in existing if f["name"] != name]
+    st.session_state.recent_files = [entry] + existing[:4]   # keep last 5
 
 
 def get_excel_sheets(uploaded_file) -> list[str]:
@@ -677,16 +758,19 @@ def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
             system_content = (
                 "You are an AI data analyst with FULL access to the user's uploaded dataset. "
                 "Answer ANY question — simple or complex — about this data.\n\n"
-                "RULES:\n"
-                "1. Answer the user's EXACT question. Never be generic.\n"
-                "2. Use the actual column names, real values, and real percentages from the data.\n"
-                "3. Simple questions (file name, row count, column list): one clear sentence.\n"
-                "4. Analysis questions (patterns, most impacting column, percentages): "
-                "use '- ' bullet points, each on its own line, max 20 words per bullet.\n"
-                "5. Conversational (hi, thanks, how are you): one natural sentence.\n"
-                "6. Plain English only — no jargon. Speak like explaining to a business owner.\n"
-                "7. For percentages or counts: compute from the data and state the exact number.\n"
-                "8. Maximum 160 words total."
+                "RESPONSE FORMAT (follow strictly):\n"
+                "• Conversational (hi, thanks): one natural sentence, no bullets.\n"
+                "• Simple lookups (file name, row count): one clear sentence.\n"
+                "• Data analysis (patterns, percentages, most impacting, summary, why, etc.):\n"
+                "    Line 1: one BOLD sentence headline using **markdown bold**, naming the key finding.\n"
+                "    Then 3-4 bullet lines, each starting with '- ' and max 15 words.\n"
+                "    Each bullet must contain a specific number, column name, or percentage from the data.\n\n"
+                "CONTENT RULES:\n"
+                "- Answer the user's EXACT question. Never be generic.\n"
+                "- Use actual column names, real values, real percentages from the data provided.\n"
+                "- Plain English only — no technical jargon.\n"
+                "- For percentages or counts: compute from the data and state the exact number.\n"
+                "- Maximum 140 words total. Be concise and impactful."
             )
             user_content = (
                 f"User's question: \"{prompt}\"\n\n"
@@ -870,44 +954,40 @@ _ML_GENERIC = (
     "I can help as a data analyst right now",
 )
 
+# Sage-coloured AI ANALYSIS label rendered inline inside the chat bubble
+_AI_LABEL = (
+    '<div style="display:inline-flex;align-items:center;gap:5px;'
+    'font-size:10px;color:#7FA98B;font-weight:700;text-transform:uppercase;'
+    'letter-spacing:.10em;margin-bottom:6px;">✦ AI Analysis</div>'
+)
+_AI_EXPLANATION_LABEL = (
+    '<div style="display:inline-flex;align-items:center;gap:5px;'
+    'font-size:10px;color:#7FA98B;font-weight:700;text-transform:uppercase;'
+    'letter-spacing:.10em;margin:10px 0 6px;">✦ AI Explanation</div>'
+)
+
 def generate_response(prompt: str) -> str:
     """
-    Always produce two visible sections so the user can clearly see
-    what came from the offline ML model and what came from AI.
-
-    Structured data queries (summarize, drivers, missing values, predict, why …):
-        [ML computed result]
-        ---
-        AI Explanation
-        [Groq's data-grounded insight]
-
-    Open-ended / conversational questions (the ML has no specific answer):
-        AI Analysis
-        [Groq answers directly from actual data]
-
-    If Groq is unavailable:
-        [ML answer only]
+    Produce a chat-bubble-ready response:
+      - structured ML queries: ML result + thin divider + 'AI Explanation' label + Groq
+      - open-ended: just sage 'AI Analysis' label + Groq's direct answer
+      - Groq unavailable: ML answer only
     """
     ml_answer   = answer_with_data(prompt)
     groq_answer = call_external_ai(prompt, ml_answer)
 
-    # Decide whether the ML produced something meaningful
     ml_useful = not any(ml_answer.startswith(p) for p in _ML_GENERIC)
 
     if groq_answer:
         if ml_useful:
-            # Show ML result first, then labeled AI Explanation below
             return (
                 f"{ml_answer}\n\n"
-                "---\n"
-                "**AI Explanation**\n\n"
+                f"{_AI_EXPLANATION_LABEL}\n"
                 f"{groq_answer}"
             )
         else:
-            # ML had no specific answer — show Groq's response labeled as AI Analysis
-            return f"**AI Analysis**\n\n{groq_answer}"
+            return f"{_AI_LABEL}\n\n{groq_answer}"
 
-    # Groq unavailable — show ML answer only
     return ml_answer
 
 
@@ -1083,8 +1163,23 @@ init_state()
 
 
 with st.sidebar:
-    st.markdown("## Data Analyst Agent")
-    st.caption("Offline ML · AI-structured pipeline")
+    # Brand block — coral/honey gradient "DA" logo + title + tagline
+    st.markdown(
+        """
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+    <div style="width:36px;height:36px;border-radius:10px;
+                background:linear-gradient(135deg,#E07856,#D9A85C);
+                color:white;display:flex;align-items:center;justify-content:center;
+                font-weight:800;font-size:14px;letter-spacing:.02em;
+                box-shadow:0 4px 10px rgba(224,120,86,.25);">DA</div>
+    <div>
+        <div style="font-size:14px;font-weight:700;color:#2B2A26;letter-spacing:-.01em;">Data Analyst Agent</div>
+        <div style="font-size:10.5px;color:#6F6A60;margin-top:1px;">Offline ML · AI-guided</div>
+    </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
     st.divider()
 
     source = st.radio(
@@ -1147,6 +1242,38 @@ with st.sidebar:
     else:  # Generate demo data
         rows = st.slider("Demo rows", 1_000, 50_000, SAMPLE_ROWS, step=1_000)
 
+    # Recent Files section (mirrors the mockup)
+    if st.session_state.recent_files:
+        st.divider()
+        st.markdown(
+            "<div style='font-size:10px;font-weight:700;letter-spacing:.12em;"
+            "text-transform:uppercase;color:#6F6A60;margin-bottom:8px;'>Recent Files</div>",
+            unsafe_allow_html=True,
+        )
+        for _f in st.session_state.recent_files[:3]:
+            _is_active = (_f["name"] == st.session_state.get("source_filename"))
+            _bg        = "#FCE5DC" if _is_active else "#FBF8F2"
+            _bd        = "#F2C8B7" if _is_active else "#ECE4D6"
+            _ic_bg     = "#FFFFFF" if _is_active else "#F8EBCF"
+            _ic_clr    = "#E07856" if _is_active else "#8A6A2E"
+            _trained_lbl = " · trained" if _f.get("trained") else ""
+            st.markdown(
+                f"""
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;
+            background:{_bg};border:1px solid {_bd};border-radius:10px;margin-bottom:5px;">
+    <div style="width:28px;height:28px;border-radius:7px;background:{_ic_bg};
+                color:{_ic_clr};display:flex;align-items:center;justify-content:center;
+                font-size:10px;font-weight:700;">{_f['ext']}</div>
+    <div style="flex:1;min-width:0;">
+        <div style="font-size:11.5px;font-weight:600;color:#2B2A26;
+                    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{_f['name']}</div>
+        <div style="font-size:10px;color:#6F6A60;">{_f['size_kb']} KB{_trained_lbl}</div>
+    </div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
     st.divider()
     st.markdown("### Training")
     target_request = st.text_input(
@@ -1189,7 +1316,8 @@ if train_clicked:
                     st.error("Upload a file first.")
                     st.stop()
 
-                st.session_state.source_filename = uploaded.name   # store for AI context
+                st.session_state.source_filename = uploaded.name
+                add_recent_file(uploaded.name, len(uploaded.getvalue()))
 
                 _is_excel = uploaded.name.lower().endswith((".xlsx", ".xls"))
                 if _is_excel:
@@ -1218,7 +1346,11 @@ if train_clicked:
                     st.error(f"File not found: {_lp}")
                     st.stop()
 
-                st.session_state.source_filename = _lp.name        # store for AI context
+                st.session_state.source_filename = _lp.name
+                try:
+                    add_recent_file(_lp.name, _lp.stat().st_size)
+                except Exception:
+                    pass
 
                 if _lp.suffix.lower() in (".xlsx", ".xls"):
                     _sheet = selected_sheet if selected_sheet is not None else 0
@@ -1385,8 +1517,9 @@ with workspace_col:
             unsafe_allow_html=True,
         )
 
-    # Pinned action row
+    # Pinned action row — styled as rounded pills with colored dots
     st.markdown("#### Pinned")
+    st.markdown('<div class="pin-row">', unsafe_allow_html=True)
     pin_prompts = ["Summarize", "Top drivers", "Missing values", "Why high?", "Predict", "Visualize"]
     pin_map = {
         "Summarize":      "Summarize this dataset",
@@ -1406,6 +1539,7 @@ with workspace_col:
                     st.session_state.chat.append({"role": "user", "content": pinned_prompt})
                     st.session_state.chat.append({"role": "assistant", "content": generate_response(pinned_prompt)})
                     st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Data & model details collapsed below
     if st.session_state.df_raw is not None:
@@ -1437,10 +1571,9 @@ with chat_col:
     with chat_container:
         for message in st.session_state.chat:
             with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+                st.markdown(message["content"], unsafe_allow_html=True)
 
-    # Input INSIDE the chat column (form-based so it lives in the column,
-    # not floated at page bottom)
+    # Input INSIDE the chat column (form-based so it lives in the column)
     with st.form("chat_form", clear_on_submit=True, border=False):
         col_in, col_send = st.columns([8, 1], gap="small")
         with col_in:
@@ -1455,3 +1588,13 @@ with chat_col:
         st.session_state.chat.append({"role": "user", "content": _typed.strip()})
         st.session_state.chat.append({"role": "assistant", "content": generate_response(_typed.strip())})
         st.rerun()
+
+    # Quick-chip suggestions — small buttons that auto-send when clicked
+    _quick = ["Show top columns", "What's the average?", "Explain the target"]
+    qcols  = st.columns(len(_quick))
+    for _i, _q in enumerate(_quick):
+        with qcols[_i]:
+            if st.button(_q, key=f"qc_{_i}", use_container_width=True):
+                st.session_state.chat.append({"role": "user", "content": _q})
+                st.session_state.chat.append({"role": "assistant", "content": generate_response(_q)})
+                st.rerun()
