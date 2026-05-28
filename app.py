@@ -725,6 +725,14 @@ def generate_response(prompt: str) -> str:
 
 
 def train_agent(df: pd.DataFrame, target_request: str, tree_depth: int, n_estimators: int) -> None:
+    # Strip Excel artifact columns before anything else
+    unnamed = [c for c in df.columns if str(c).startswith("Unnamed:")]
+    if unnamed:
+        df = df.drop(columns=unnamed)
+
+    if df.empty or len(df.columns) == 0:
+        raise ValueError("The uploaded file has no usable columns after removing unnamed/empty columns.")
+
     target_col = detect_target(df, target_request.strip() or None)
     model_df = ensure_target(df, target_col)
     clean_df = dl.clean_data(model_df, target_col=target_col)

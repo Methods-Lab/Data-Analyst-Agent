@@ -211,6 +211,11 @@ def clean_data(df: pd.DataFrame, target_col: str = "sales_category") -> pd.DataF
     """
     df = df.copy()
 
+    # Drop Excel artifact columns (e.g. "Unnamed: 0", "Unnamed: 1")
+    unnamed = [c for c in df.columns if str(c).startswith("Unnamed:")]
+    if unnamed:
+        df = df.drop(columns=unnamed)
+
     # Drop near-empty columns
     threshold = 0.6 * len(df)
     df = df.dropna(axis=1, thresh=int(len(df) - threshold))

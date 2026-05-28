@@ -144,8 +144,32 @@ def train(
 
     feature_names = list(X.columns)
 
+    # Only stratify when every class has at least 2 samples; otherwise sklearn crashes
+    _class_counts = np.bincount(y_enc)
+    _min_count    = int(_class_counts.min())
+    _can_stratify = _min_count >= 2
+
+    # If any class has fewer samples than needed for the split, drop those rows
+    if not _can_stratify:
+        _keep_mask = np.isin(y_enc, np.where(_class_counts >= 2)[0])
+        X, y_enc = X[_keep_mask], y_enc[_keep_mask]
+        if len(np.unique(y_enc)) < 2:
+            raise ValueError(
+                "Not enough data to train: every class in the target column needs at least 2 rows."
+            )
+        _class_counts = np.bincount(y_enc)
+        _min_count    = int(_class_counts.min())
+        _can_stratify = _min_count >= 2
+        log.warning(
+            "[trainer] Dropped %d singleton-class rows; continuing with %d rows.",
+            int(_keep_mask.size - _keep_mask.sum()), len(X),
+        )
+
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y_enc, test_size=test_size, random_state=random_state, stratify=y_enc
+        X, y_enc,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=y_enc if _can_stratify else None,
     )
 
     # -----------------------------------------------------------------------
@@ -226,15 +250,18 @@ def train(
         cv_idx  = rng_cv.choice(len(X), cv_cap, replace=False)
         X_cv    = X.iloc[cv_idx]
         y_cv    = y_enc[cv_idx]
+        # CV folds must not exceed the smallest class count in the sample
+        _cv_class_min = int(np.bincount(y_cv).min())
+        _cv_folds     = max(2, min(5, _cv_class_min))
         cv_rf   = RandomForestClassifier(
             n_estimators=50, random_state=random_state, n_jobs=-1
         )
-        cv_scores = cross_val_score(cv_rf, X_cv, y_cv, cv=5, scoring="accuracy", n_jobs=-1)
+        cv_scores = cross_val_score(cv_rf, X_cv, y_cv, cv=_cv_folds, scoring="accuracy", n_jobs=-1)
         cv_mean   = float(cv_scores.mean())
         cv_std    = float(cv_scores.std())
         log.info(
-            "[trainer] 5-fold CV accuracy: %.3f ± %.3f (sample=%d rows)",
-            cv_mean, cv_std, cv_cap,
+            "[trainer] %d-fold CV accuracy: %.3f ± %.3f (sample=%d rows)",
+            _cv_folds, cv_mean, cv_std, cv_cap,
         )
     except Exception as exc:
         log.warning("[trainer] Cross-validation failed (non-fatal): %s", exc)
