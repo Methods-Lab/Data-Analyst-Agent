@@ -754,6 +754,33 @@ def dataset_context_for_llm(prompt: str) -> str:
     return "\n".join(lines)
 
 
+def _normalize_bullets(text: str) -> str:
+    """
+    Force bullets onto separate lines, in case the LLM concatenates them
+    inline like 'X. - Y. - Z.' instead of newline-separated.
+    """
+    if not text:
+        return text
+    lines  = text.split("\n")
+    output = []
+    for line in lines:
+        stripped = line.strip()
+        # Inline-bullet detection: contains ' - ' at least twice but isn't already a bullet line
+        if stripped.count(" - ") >= 2 and not stripped.startswith("-"):
+            parts = re.split(r"\s+-\s+", stripped)
+            head  = parts[0].strip()
+            if head:
+                output.append(head)
+                output.append("")
+            for p in parts[1:]:
+                p = p.strip().rstrip(".") + "."
+                if p and p != ".":
+                    output.append(f"- {p}")
+        else:
+            output.append(line)
+    return "\n".join(output)
+
+
 def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
     """
     Groq acts as the PRIMARY responder, answering the user's EXACT question
@@ -770,20 +797,24 @@ def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
             data_context = dataset_context_for_llm(prompt)
             system_content = (
                 "You are an AI data analyst with FULL access to the user's uploaded dataset. "
-                "Answer ANY question — simple or complex — about this data.\n\n"
-                "RESPONSE FORMAT (follow strictly):\n"
-                "• Conversational (hi, thanks): one natural sentence, no bullets.\n"
-                "• Simple lookups (file name, row count): one clear sentence.\n"
-                "• Data analysis (patterns, percentages, most impacting, summary, why, etc.):\n"
-                "    Line 1: one BOLD sentence headline using **markdown bold**, naming the key finding.\n"
-                "    Then 3-4 bullet lines, each starting with '- ' and max 15 words.\n"
-                "    Each bullet must contain a specific number, column name, or percentage from the data.\n\n"
-                "CONTENT RULES:\n"
-                "- Answer the user's EXACT question. Never be generic.\n"
-                "- Use actual column names, real values, real percentages from the data provided.\n"
-                "- Plain English only — no technical jargon.\n"
-                "- For percentages or counts: compute from the data and state the exact number.\n"
-                "- Maximum 140 words total. Be concise and impactful."
+                "Answer ANY question about the data.\n\n"
+                "OUTPUT FORMAT — this is critical, follow EXACTLY:\n\n"
+                "For data-analysis questions, write the response as MARKDOWN with this exact structure:\n\n"
+                "**One bold headline sentence here.**\n\n"
+                "- First bullet on its own line\n"
+                "- Second bullet on its own line\n"
+                "- Third bullet on its own line\n"
+                "- Fourth bullet on its own line\n\n"
+                "Rules:\n"
+                "1. Put a REAL NEWLINE between each bullet — NEVER put bullets on the same line.\n"
+                "2. Put a BLANK LINE between the headline and the first bullet.\n"
+                "3. Each bullet starts with '- ' (dash space) and is max 15 words.\n"
+                "4. Each bullet must contain a specific number, column name, or percentage from the data.\n"
+                "5. Total 3 to 4 bullets only.\n\n"
+                "For conversational messages (hi, thanks, how are you): one natural sentence, no bullets.\n"
+                "For simple lookups (file name, row count): one clear sentence, no bullets.\n\n"
+                "Content: use real column names + real numbers from the data. Plain English. "
+                "Maximum 140 words total."
             )
             user_content = (
                 f"User's question: \"{prompt}\"\n\n"
@@ -806,7 +837,8 @@ def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
             temperature=0.4,
             max_tokens=300,
         )
-        return response.choices[0].message.content.strip()
+        raw = response.choices[0].message.content.strip()
+        return _normalize_bullets(raw)
     except Exception:
         return None
 
@@ -1587,6 +1619,27 @@ with chat_col:
         for message in st.session_state.chat:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"], unsafe_allow_html=True)
+
+    # Auto-scroll all scrollable Streamlit containers to their bottom
+    # so the newest chat message is always in view.
+    import streamlit.components.v1 as _components
+    _components.html(
+        """
+<script>
+  const scrollAll = () => {
+    const doc = window.parent.document;
+    doc.querySelectorAll('[data-testid="stVerticalBlockBorderWrapper"]').forEach(el => {
+      if (el.scrollHeight > el.clientHeight + 10) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+  };
+  setTimeout(scrollAll, 100);
+  setTimeout(scrollAll, 350);
+</script>
+""",
+        height=0,
+    )
 
     # Input INSIDE the chat column (form-based so it lives in the column)
     with st.form("chat_form", clear_on_submit=True, border=False):
