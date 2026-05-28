@@ -60,229 +60,336 @@ st.markdown(
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-    --ink: #ffffff;
-    --muted: #cbd8e8;
-    --panel: rgba(7, 13, 25, 0.92);
-    --panel-2: rgba(17, 31, 50, 0.92);
-    --line: rgba(175, 211, 238, 0.34);
-    --cyan: #49d6d0;
-    --green: #79e68f;
-    --amber: #f6c66a;
-    --rose: #ff7c9b;
+    --bg:          #F7F3EC;
+    --surface:     #FFFFFF;
+    --surface-2:   #FBF8F2;
+    --border:      #ECE4D6;
+    --ink:         #2B2A26;
+    --muted:       #6F6A60;
+    --coral:       #E07856;
+    --coral-dark:  #D86848;
+    --coral-soft:  #FCE5DC;
+    --sage:        #7FA98B;
+    --sage-soft:   #E3EEDF;
+    --honey:       #D9A85C;
+    --honey-soft:  #F8EBCF;
+    --shadow:      0 1px 2px rgba(43,42,38,.04), 0 8px 24px rgba(43,42,38,.06);
 }
 
-html, body, [class*="css"] {
-    font-family: "Inter", sans-serif;
+html, body, [class*="css"], .stApp, [data-testid="stMarkdownContainer"] {
+    font-family: 'Inter', system-ui, sans-serif !important;
+    color: var(--ink) !important;
 }
 
 .stApp {
-    color: var(--ink);
     background:
-        radial-gradient(circle at 12% 10%, rgba(73, 214, 208, 0.24), transparent 30%),
-        radial-gradient(circle at 78% 0%, rgba(246, 198, 106, 0.14), transparent 28%),
-        linear-gradient(125deg, #07111f 0%, #0d1d32 46%, #132923 100%);
-}
-
-.stApp::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-        linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent 78%);
+        radial-gradient(circle at 10% 0%,  rgba(224,120,86,.07), transparent 40%),
+        radial-gradient(circle at 95% 30%, rgba(127,169,139,.06), transparent 38%),
+        var(--bg) !important;
 }
 
 .main .block-container {
     padding-top: 1.2rem;
-    max-width: 1420px;
+    padding-bottom: 2rem;
+    max-width: 1640px;
 }
 
+/* ===== Sidebar styled as the left "ribbon" ===== */
 [data-testid="stSidebar"] {
-    background: rgba(5, 12, 24, 0.9);
-    border-right: 1px solid var(--line);
+    background: var(--surface) !important;
+    border-right: 1px solid var(--border) !important;
+}
+[data-testid="stSidebar"] > div:first-child {
+    padding-top: 18px;
+}
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h4 {
+    color: var(--ink) !important;
+    font-weight: 700 !important;
+    letter-spacing: -.01em !important;
+}
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stMarkdown p,
+[data-testid="stSidebar"] .stCaption {
+    color: var(--muted) !important;
+}
+[data-testid="stSidebar"] hr {
+    border-color: var(--border) !important;
+    opacity: .8;
 }
 
-h1, h2, h3 {
-    letter-spacing: 0;
+/* All text default to warm charcoal */
+h1, h2, h3, h4, h5, h6, p, li, label, span, div {
+    color: var(--ink);
 }
+.stMarkdown, .stCaption { color: var(--ink) !important; }
+small, .stCaption { color: var(--muted) !important; }
 
+/* ===== Header card (file info + status chips) ===== */
 .app-head {
-    position: relative;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 14px 16px;
-    background: rgba(5, 12, 22, 0.84);
-    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.24);
-    animation: liftIn 520ms ease-out both;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 20px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow);
 }
-
 .app-head-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 12px;
     flex-wrap: wrap;
 }
-
 .app-title {
-    font-size: 1.2rem;
-    font-weight: 800;
-    color: #ffffff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: -.01em;
 }
-
 .status-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 0;
+    gap: 6px;
 }
-
 .status-pill {
-    border: 1px solid var(--line);
+    border: 1px solid var(--border);
     border-radius: 999px;
-    padding: 8px 12px;
-    background: rgba(255,255,255,0.06);
+    padding: 5px 11px;
+    background: var(--surface-2);
     color: var(--muted);
-    font-size: 0.84rem;
-    backdrop-filter: blur(12px);
+    font-size: .76rem;
+    font-weight: 500;
 }
 
-.panel {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 18px;
-    background: var(--panel);
-    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.25);
-    animation: liftIn 520ms ease-out both;
-}
-
+/* ===== Metric cards ===== */
 .metric-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
-    margin: 18px 0;
+    margin: 4px 0 16px;
 }
-
 .metric {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 15px;
-    background: var(--panel-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    position: relative;
 }
-
+.metric .ico {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+.metric.coral   .ico { background: var(--coral-soft);  color: var(--coral); }
+.metric.sage    .ico { background: var(--sage-soft);   color: #4F7E5C; }
+.metric.honey   .ico { background: var(--honey-soft);  color: #8A6A2E; }
+.metric.neutral .ico { background: #EDE7DD;            color: var(--muted); }
 .metric .value {
     display: block;
-    font-size: 1.55rem;
-    font-weight: 800;
+    font-size: 1.45rem;
+    font-weight: 700;
     color: var(--ink);
+    letter-spacing: -.02em;
 }
-
 .metric .label {
     display: block;
-    margin-top: 5px;
+    margin-top: 2px;
     color: var(--muted);
-    font-size: 0.78rem;
+    font-size: .68rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: .06em;
+    font-weight: 600;
 }
 
+/* ===== Chat panel ===== */
 .chat-wrap {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 16px;
-    background: rgba(4, 10, 20, 0.9);
-    min-height: 620px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 14px;
+    min-height: 600px;
+    box-shadow: var(--shadow);
 }
-
-.insight {
-    border-left: 3px solid var(--cyan);
-    background: rgba(73,214,208,0.09);
-    padding: 12px 14px;
-    border-radius: 8px;
-    margin: 10px 0;
+.chat-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 6px 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
 }
-
-.chip-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 12px 0 4px;
+.chat-avatar {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--sage), var(--honey));
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px;
+    box-shadow: 0 4px 10px rgba(127,169,139,.3);
 }
+.chat-header .title { font-size: 13px; font-weight: 700; color: var(--ink); }
+.chat-header .sub   { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.chat-header .dot   { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); }
 
-.chip {
-    border: 1px solid rgba(73,214,208,0.28);
-    border-radius: 999px;
-    padding: 7px 10px;
-    color: #d7fffb;
-    background: rgba(73,214,208,0.08);
-    font-size: 0.82rem;
-}
-
-.stButton > button {
-    border-radius: 8px;
-    border: 1px solid rgba(73,214,208,0.34);
-    background: linear-gradient(135deg, #49d6d0, #79e68f);
-    color: #03111a;
-    font-weight: 800;
-    transition: transform 160ms ease, box-shadow 160ms ease;
-}
-
-.stButton > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 28px rgba(73, 214, 208, 0.18);
-}
-
+/* ===== Chat messages ===== */
 div[data-testid="stChatMessage"] {
-    border: 1px solid rgba(175, 211, 238, 0.28);
-    border-radius: 8px;
-    padding: 12px;
-    margin: 10px 0;
-    background: rgba(17, 31, 50, 0.94);
-    color: #ffffff !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    padding: 10px 13px !important;
+    margin: 8px 0 !important;
+    background: var(--surface) !important;
 }
-
 div[data-testid="stChatMessage"] p,
 div[data-testid="stChatMessage"] li,
 div[data-testid="stChatMessage"] span,
-div[data-testid="stChatMessage"] div {
-    color: #ffffff !important;
+div[data-testid="stChatMessage"] strong {
+    color: var(--ink) !important;
 }
-
 div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
-    background: rgba(33, 74, 96, 0.94);
-    border-color: rgba(73, 214, 208, 0.42);
+    background: var(--coral) !important;
+    border-color: var(--coral-dark) !important;
+}
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) * {
+    color: #FFFFFF !important;
 }
 
+/* ===== Chat input ===== */
+div[data-testid="stChatInput"] {
+    background: transparent !important;
+}
 div[data-testid="stChatInput"] textarea {
-    color: #ffffff !important;
-    background: rgba(10, 20, 34, 0.96) !important;
-    border: 1px solid rgba(73, 214, 208, 0.38) !important;
+    color: var(--ink) !important;
+    background: var(--surface-2) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
 }
-
 div[data-testid="stChatInput"] textarea::placeholder {
-    color: #b9c9d8 !important;
+    color: var(--muted) !important;
 }
 
+/* ===== Buttons ===== */
+.stButton > button {
+    border-radius: 11px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+    transition: transform 120ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.stButton > button:hover {
+    transform: translateY(-1px);
+    background: var(--coral-soft);
+    border-color: #F2C8B7;
+    color: var(--coral);
+}
+/* Primary buttons (sidebar Train Agent) — use first button in sidebar */
+[data-testid="stSidebar"] .stButton:first-of-type > button {
+    background: linear-gradient(135deg, var(--coral), var(--coral-dark));
+    color: white !important;
+    border-color: var(--coral-dark);
+    box-shadow: 0 6px 14px rgba(224,120,86,.28);
+}
+[data-testid="stSidebar"] .stButton:first-of-type > button:hover {
+    background: linear-gradient(135deg, #E58668, #DE7253);
+    color: white !important;
+}
+
+/* Sliders */
+[data-testid="stSlider"] [role="slider"] {
+    background: white !important;
+    border: 2px solid var(--coral) !important;
+}
+[data-testid="stSlider"] > div > div > div {
+    background: linear-gradient(90deg, var(--coral), var(--honey)) !important;
+}
+
+/* Inputs */
+input, textarea, [data-testid="stTextInput"] input {
+    background: var(--surface-2) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--ink) !important;
+    border-radius: 9px !important;
+}
+
+/* File uploader */
+[data-testid="stFileUploader"] {
+    background: var(--surface-2);
+    border: 2px dashed #DCD2C2;
+    border-radius: 14px;
+    padding: 8px;
+}
+[data-testid="stFileUploader"] section {
+    background: transparent !important;
+    border: none !important;
+}
+[data-testid="stFileUploader"] button {
+    background: var(--coral) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+}
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] span { color: var(--muted) !important; }
+
+/* Radio buttons */
+[data-testid="stRadio"] label {
+    color: var(--ink) !important;
+}
+
+/* Alerts */
 div[data-testid="stAlert"] {
-    color: #ffffff;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+div[data-testid="stAlert"][data-baseweb="notification"] {
+    background: var(--sage-soft) !important;
+    color: #2B2A26 !important;
 }
 
-div[data-testid="stChatMessage"] {
-    animation: liftIn 240ms ease-out both;
+/* Tabs */
+[data-testid="stTabs"] button {
+    color: var(--muted) !important;
+    border-bottom-color: var(--border) !important;
+}
+[data-testid="stTabs"] button[aria-selected="true"] {
+    color: var(--coral) !important;
+    border-bottom-color: var(--coral) !important;
 }
 
-@keyframes liftIn {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
+/* Expander */
+[data-testid="stExpander"] {
+    background: var(--surface);
+    border: 1px solid var(--border) !important;
+    border-radius: 14px !important;
+    box-shadow: var(--shadow);
 }
+[data-testid="stExpander"] summary {
+    color: var(--ink) !important;
+    font-weight: 600;
+}
+
+/* Headings */
+h1, h2, h3, h4 {
+    letter-spacing: -.01em;
+}
+
+.section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 10px 0 6px;
+}
+
+/* Pinned section heading */
+h4 { font-size: .85rem !important; color: var(--muted) !important; text-transform: uppercase; letter-spacing: .08em; }
 
 @media (max-width: 900px) {
     .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .app-head { padding: 12px; }
 }
 </style>
 """,
@@ -864,14 +971,112 @@ def render_metrics() -> None:
     st.markdown(
         f"""
 <div class="metric-grid">
-    <div class="metric"><span class="value">{profile.get('rows', 0):,}</span><span class="label">Rows Learned</span></div>
-    <div class="metric"><span class="value">{profile.get('columns', 0):,}</span><span class="label">Signals</span></div>
-    <div class="metric"><span class="value">{cv_label}</span><span class="label">5-Fold CV Accuracy</span></div>
-    <div class="metric"><span class="value">{result.get('n_rules', 0):,}</span><span class="label">Rules · {shap_badge}</span></div>
+    <div class="metric coral"><div class="ico">↗</div><span class="value">{profile.get('rows', 0):,}</span><span class="label">Rows Learned</span></div>
+    <div class="metric sage"><div class="ico">◆</div><span class="value">{profile.get('columns', 0):,}</span><span class="label">Signals</span></div>
+    <div class="metric honey"><div class="ico">✦</div><span class="value">{cv_label}</span><span class="label">CV Accuracy</span></div>
+    <div class="metric neutral"><div class="ico">∎</div><span class="value">{result.get('n_rules', 0):,}</span><span class="label">Rules · {shap_badge}</span></div>
 </div>
 """,
         unsafe_allow_html=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Visualization dialog — purely ML-library driven (plotly), no AI
+# ---------------------------------------------------------------------------
+
+@st.dialog("Visualize your data", width="large")
+def visualize_dialog() -> None:
+    """Render correlation-based graphs on numeric columns using plotly."""
+    import plotly.express as px
+
+    df = st.session_state.df_raw
+    if df is None:
+        st.warning("Train the agent on a file first.")
+        return
+
+    numeric_df = df.select_dtypes(include=[np.number])
+    if numeric_df.shape[1] < 2:
+        st.warning("Need at least 2 numeric columns to visualize correlations.")
+        return
+
+    # Brand palette so charts match the rest of the UI
+    coral_scale = [
+        [0.00, "#7FA98B"],   # sage  (strong negative)
+        [0.25, "#C8DEC6"],   # sage soft
+        [0.50, "#FBF8F2"],   # cream (no correlation)
+        [0.75, "#F8E1D2"],   # coral soft
+        [1.00, "#E07856"],   # coral (strong positive)
+    ]
+
+    graph_type = st.radio(
+        "Choose graph type",
+        ["Correlation Heatmap", "Scatter Plot (top correlation)", "Distribution Histogram"],
+        horizontal=True,
+    )
+
+    fig_layout = dict(
+        font=dict(family="Inter, sans-serif", color="#2B2A26", size=12),
+        paper_bgcolor="#FBF8F2",
+        plot_bgcolor="#FFFFFF",
+        margin=dict(l=40, r=20, t=50, b=40),
+    )
+
+    if graph_type == "Correlation Heatmap":
+        corr = numeric_df.corr().round(2)
+        fig  = px.imshow(
+            corr,
+            text_auto=True,
+            aspect="auto",
+            color_continuous_scale=coral_scale,
+            zmin=-1, zmax=1,
+            title="Correlation between numeric columns",
+        )
+        fig.update_layout(**fig_layout)
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            "Values near **+1** (coral) mean two columns move together; "
+            "values near **−1** (sage) mean they move opposite; "
+            "values near **0** mean little relationship."
+        )
+
+    elif graph_type == "Scatter Plot (top correlation)":
+        corr = numeric_df.corr().abs()
+        np.fill_diagonal(corr.values, 0)
+        # Most correlated pair
+        max_val   = corr.values.max()
+        x_col, y_col = corr.stack().idxmax()
+        signed    = numeric_df.corr().loc[x_col, y_col]
+        fig = px.scatter(
+            numeric_df, x=x_col, y=y_col,
+            title=f"{x_col} vs {y_col} — correlation {signed:+.2f}",
+            opacity=0.55,
+        )
+        fig.update_traces(marker=dict(color="#E07856", size=8,
+                                       line=dict(color="#D86848", width=0.6)))
+        fig.update_layout(**fig_layout)
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            f"These two columns are the **most strongly related** in your data "
+            f"(absolute correlation = {max_val:.2f})."
+        )
+
+    else:  # Distribution Histogram
+        col = st.selectbox("Choose a numeric column", numeric_df.columns)
+        fig = px.histogram(
+            numeric_df, x=col, nbins=30,
+            title=f"Distribution of {col}",
+            color_discrete_sequence=["#7FA98B"],
+        )
+        fig.update_layout(**fig_layout)
+        st.plotly_chart(fig, use_container_width=True)
+        s = numeric_df[col].describe()
+        st.caption(
+            f"**Average:** {s['mean']:.2f}  ·  "
+            f"**Median:** {s['50%']:.2f}  ·  "
+            f"**Min:** {s['min']:.2f}  ·  "
+            f"**Max:** {s['max']:.2f}"
+        )
 
 
 init_state()
@@ -1074,82 +1279,115 @@ if trained:
     render_metrics()
 
 
-st.markdown('<div class="chat-wrap">', unsafe_allow_html=True)
-
 if not st.session_state.chat:
     st.session_state.chat = [
         {
             "role": "assistant",
             "content": (
-                "Hi. Upload or generate data from the sidebar, train me, then ask anything. "
-                "You can also chat now if you only need analyst guidance."
+                "Hi! Upload or generate data from the sidebar, train me, then ask anything "
+                "about your data — patterns, percentages, predictions, or just say hi."
             ),
         }
     ]
 
-for message in st.session_state.chat:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# Two-column layout: workspace (left) + chat panel (right)
+workspace_col, chat_col = st.columns([1.7, 1], gap="medium")
 
-st.markdown("#### Pinned")
-pin_prompts = [
-    "Summarize",
-    "Top drivers",
-    "Missing values",
-    "Why high?",
-    "Predict",
-]
-pin_cols = st.columns(len(pin_prompts))
-pin_map = {
-    "Summarize": "Summarize this dataset",
-    "Top drivers": "What are the top drivers?",
-    "Missing values": "Show missing values",
-    "Why high?": "Why is the high outcome happening?",
-    "Predict": "Predict if quantity=5 and discount_pct=10",
-}
-for idx, label in enumerate(pin_prompts):
-    with pin_cols[idx]:
-        if st.button(label, key=f"pin_{idx}", use_container_width=True):
-            pinned_prompt = pin_map[label]
-            st.session_state.chat.append({"role": "user", "content": pinned_prompt})
-            st.session_state.chat.append({"role": "assistant", "content": generate_response(pinned_prompt)})
-            st.rerun()
+# =========================================================================
+# WORKSPACE (left)
+# =========================================================================
+with workspace_col:
+    # Drivers chart (Most Impactful Columns)
+    if st.session_state.df_raw is not None and Path("feature_importances.pkl").exists():
+        try:
+            import plotly.express as _px
+            imp_payload = trainer.load_importances()
+            shap_imp   = imp_payload.get("shap_importances", {})
+            perm_imp   = imp_payload.get("importances", {})
+            imp_source = shap_imp if shap_imp else perm_imp
+            imp_label  = "SHAP" if shap_imp else "Permutation importance"
+            if imp_source:
+                ranked = sorted(imp_source.items(), key=lambda x: x[1], reverse=True)[:8]
+                df_imp = pd.DataFrame(ranked, columns=["column", "score"])
+                fig = _px.bar(
+                    df_imp.iloc[::-1], x="score", y="column", orientation="h",
+                    color="score",
+                    color_continuous_scale=[[0, "#F8EBCF"], [0.5, "#D9A85C"], [1, "#E07856"]],
+                    title="Most impactful columns",
+                )
+                fig.update_layout(
+                    font=dict(family="Inter, sans-serif", color="#2B2A26", size=12),
+                    paper_bgcolor="#FFFFFF",
+                    plot_bgcolor="#FFFFFF",
+                    margin=dict(l=10, r=10, t=50, b=20),
+                    coloraxis_showscale=False,
+                    xaxis_title="", yaxis_title="",
+                    height=320,
+                )
+                fig.update_xaxes(showgrid=True, gridcolor="#ECE4D6")
+                fig.update_yaxes(showgrid=False)
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption(f"Ranking method: **{imp_label}** — what drives the predictions most.")
+        except Exception:
+            pass
 
-prompt = st.chat_input("Message the analyst chatbot...")
+    # Pinned action row (with Visualize)
+    st.markdown("#### Pinned")
+    pin_prompts = ["Summarize", "Top drivers", "Missing values", "Why high?", "Predict", "Visualize"]
+    pin_map = {
+        "Summarize":      "Summarize this dataset",
+        "Top drivers":    "What are the top drivers?",
+        "Missing values": "Show missing values",
+        "Why high?":      "Why is the high outcome happening?",
+        "Predict":        "Predict if quantity=5 and discount_pct=10",
+    }
+    pin_cols = st.columns(len(pin_prompts))
+    for idx, label in enumerate(pin_prompts):
+        with pin_cols[idx]:
+            if st.button(label, key=f"pin_{idx}", use_container_width=True):
+                if label == "Visualize":
+                    visualize_dialog()
+                else:
+                    pinned_prompt = pin_map[label]
+                    st.session_state.chat.append({"role": "user", "content": pinned_prompt})
+                    st.session_state.chat.append({"role": "assistant", "content": generate_response(pinned_prompt)})
+                    st.rerun()
+
+    # Data & model details collapsed below
+    if st.session_state.df_raw is not None:
+        with st.expander("Data and model details", expanded=False):
+            tabs = st.tabs(["Preview", "Profile"])
+            with tabs[0]:
+                st.dataframe(st.session_state.df_raw.head(30), use_container_width=True, height=320)
+            with tabs[1]:
+                st.json(st.session_state.data_profile or {})
+
+# =========================================================================
+# CHAT PANEL (right)
+# =========================================================================
+with chat_col:
+    st.markdown(
+        """
+<div class="chat-header">
+    <div class="chat-avatar">AI</div>
+    <div>
+        <div class="title">AI Assistant</div>
+        <div class="sub"><span class="dot"></span>Reading your data</div>
+    </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    chat_container = st.container(height=560, border=False)
+    with chat_container:
+        for message in st.session_state.chat:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+# Chat input — stays at page level (Streamlit pins it to bottom)
+prompt = st.chat_input("Ask anything about your data…")
 if prompt:
     st.session_state.chat.append({"role": "user", "content": prompt})
     st.session_state.chat.append({"role": "assistant", "content": generate_response(prompt)})
     st.rerun()
-st.markdown("</div>", unsafe_allow_html=True)
-
-if st.session_state.df_raw is not None:
-    with st.expander("Data and model details", expanded=False):
-        tabs = st.tabs(["Preview", "Drivers", "Profile"])
-        with tabs[0]:
-            st.dataframe(st.session_state.df_raw.head(30), use_container_width=True, height=360)
-        with tabs[1]:
-            if st.session_state.train_result and Path("feature_importances.pkl").exists():
-                imp_payload = trainer.load_importances()
-                # Prefer SHAP importances (more accurate); fall back to permutation importance
-                shap_imp = imp_payload.get("shap_importances", {})
-                perm_imp = imp_payload.get("importances", {})
-                imp_source = shap_imp if shap_imp else perm_imp
-                imp_label  = "SHAP Mean |value|" if shap_imp else "Permutation Importance"
-                ranked_imp = pd.DataFrame(
-                    sorted(imp_source.items(), key=lambda item: item[1], reverse=True)[:15],
-                    columns=["feature", "importance"],
-                )
-                st.caption(f"Driver ranking method: **{imp_label}**")
-                st.bar_chart(ranked_imp.set_index("feature"))
-                # Also show CV accuracy note if available
-                cv_mean = st.session_state.train_result.get("cv_mean_accuracy")
-                cv_std  = st.session_state.train_result.get("cv_std", 0.0)
-                if cv_mean and cv_std > 0:
-                    st.caption(
-                        f"5-fold cross-validation accuracy: **{cv_mean:.1%} ± {cv_std:.3f}** "
-                        "(generalisation estimate, more reliable than single train/test split)"
-                    )
-            else:
-                st.info("Train the model to see drivers.")
-        with tabs[2]:
-            st.json(st.session_state.data_profile or {})
