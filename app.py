@@ -9,24 +9,39 @@ it behaves as a general analyst assistant and invites the user to attach data.
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
+import tempfile
+import traceback as _tb
 from pathlib import Path
 from typing import Any
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 import numpy as np
 import pandas as pd
-import requests
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 import data_loader as dl
+import groq_cleaner as _gc
 import reasoner
 import trainer
 from abduction import try_bayesian_abduce
 
+# ---------------------------------------------------------------------------
+# Groq API key — used in background for data structuring and suggestions.
+# Never exposed to the user in the UI.
+# ---------------------------------------------------------------------------
+_GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+_GROQ_MODEL   = "llama-3.3-70b-versatile"
 
 SAMPLE_ROWS = 10_000
 
@@ -277,42 +292,35 @@ div[data-testid="stChatMessage"] {
 
 def init_state() -> None:
     defaults = {
-        "df_raw": None,
-        "df_clean": None,
-        "train_result": None,
-        "target_col": None,
-        "chat": [],
-        "text_corpus": None,
-        "text_vectors": None,
+        "df_raw":        None,
+        "df_clean":      None,
+        "train_result":  None,
+        "target_col":    None,
+        "chat":          [],
+        "text_corpus":   None,
+        "text_vectors":  None,
         "text_vectorizer": None,
-        "data_profile": None,
-        "api_provider": "Offline ML",
-        "api_key": "",
-        "api_model": "",
-        "api_base_url": "",
+        "data_profile":  None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
 
-def read_uploaded_file(uploaded_file: Any) -> pd.DataFrame:
-    name = uploaded_file.name.lower()
-    if name.endswith((".xlsx", ".xls")):
-        return pd.read_excel(uploaded_file, engine="openpyxl")
-    if name.endswith(".json"):
-        raw = json.load(uploaded_file)
-        if isinstance(raw, list):
-            return pd.DataFrame(raw)
-        if isinstance(raw, dict):
-            try:
-                return pd.json_normalize(raw)
-            except Exception:
-                return pd.DataFrame([raw])
-    if name.endswith(".txt"):
-        text = uploaded_file.read().decode("utf-8", errors="ignore")
-        return text_to_frame(text)
-    return pd.read_csv(uploaded_file)
+def get_excel_sheets(uploaded_file) -> list[str]:
+    """Return sheet names from an uploaded Excel file without consuming the stream."""
+    try:
+        xf = pd.ExcelFile(io.BytesIO(uploaded_file.getvalue()), engine="openpyxl")
+        return xf.sheet_names
+    except Exception:
+        return []
+
+
+def read_excel_sheet(source, sheet_name) -> pd.DataFrame:
+    """Read a specific sheet from an Excel path or uploaded file."""
+    if isinstance(source, (str, Path)):
+        return pd.read_excel(source, sheet_name=sheet_name, engine="openpyxl")
+    return pd.read_excel(io.BytesIO(source.getvalue()), sheet_name=sheet_name, engine="openpyxl")
 
 
 def read_local_file(path_text: str) -> pd.DataFrame:
@@ -467,15 +475,6 @@ def compact_table(items: dict[str, Any], limit: int = 8) -> str:
     return "\n".join(lines)
 
 
-def provider_settings(provider: str, custom_base_url: str, custom_model: str) -> tuple[str, str]:
-    presets = {
-        "Groq": ("https://api.groq.com/openai/v1/chat/completions", "llama-3.1-8b-instant"),
-        "xAI Grok": ("https://api.x.ai/v1/chat/completions", "grok-2-latest"),
-        "OpenRouter": ("https://openrouter.ai/api/v1/chat/completions", "meta-llama/llama-3.1-8b-instruct:free"),
-        "Custom": (custom_base_url.strip(), custom_model.strip()),
-    }
-    return presets.get(provider, ("", ""))
-
 
 def dataset_context_for_llm(prompt: str) -> str:
     profile = st.session_state.data_profile or {}
@@ -514,67 +513,39 @@ def dataset_context_for_llm(prompt: str) -> str:
 
 
 def call_external_ai(prompt: str, local_answer: str) -> str | None:
-    provider = st.session_state.get("api_provider", "Offline ML")
-    if provider == "Offline ML":
-        return None
-
-    api_key = st.session_state.get("api_key") or os.getenv("AI_API_KEY", "")
-    base_url, model = provider_settings(
-        provider,
-        st.session_state.get("api_base_url", ""),
-        st.session_state.get("api_model", ""),
-    )
-    model = st.session_state.get("api_model") or model
-
-    if not api_key:
-        return (
-            f"{provider} is selected, but no API key is set. Add the key in the sidebar "
-            "or set AI_API_KEY, then ask again.\n\nLocal ML answer:\n"
-            f"{local_answer}"
-        )
-
-    if not base_url or not model:
-        return "The selected API provider is missing a base URL or model name."
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a senior data analyst chatbot. Answer conversationally and directly. "
-                "Use the provided dataset context, local ML result, and evidence. If the data does "
-                "not support a claim, say so. Keep answers useful, not generic."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"User question:\n{prompt}\n\n"
-                f"Dataset context:\n{dataset_context_for_llm(prompt)}\n\n"
-                f"Local ML/statistical answer to improve:\n{local_answer}"
-            ),
-        },
-    ]
-
+    """
+    Enrich the local ML answer with Groq suggestions (background, hidden from user).
+    Falls back silently to None so the local answer is shown instead.
+    """
     try:
-        response = requests.post(
-            base_url,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "http://localhost:8501",
-                "X-Title": "Analyst ML Chatbot",
-            },
-            json={"model": model, "messages": messages, "temperature": 0.35, "max_tokens": 900},
-            timeout=45,
+        from groq import Groq
+        client   = Groq(api_key=_GROQ_API_KEY)
+        response = client.chat.completions.create(
+            model=_GROQ_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a senior data analyst. The user's dataset has been processed by an "
+                        "offline ML model. Enrich the local ML answer with concise, specific analyst "
+                        "insights grounded in the data context. Keep your response under 180 words."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Question: {prompt}\n\n"
+                        f"Dataset context:\n{dataset_context_for_llm(prompt)}\n\n"
+                        f"Local ML answer: {local_answer}"
+                    ),
+                },
+            ],
+            temperature=0.3,
+            max_tokens=300,
         )
-        response.raise_for_status()
-        payload = response.json()
-        return payload["choices"][0]["message"]["content"].strip()
-    except Exception as exc:
-        return (
-            f"The {provider} API call failed: {exc}\n\n"
-            f"Local ML answer:\n{local_answer}"
-        )
+        return response.choices[0].message.content.strip()
+    except Exception:
+        return None
 
 
 def answer_without_data(prompt: str) -> str:
@@ -773,14 +744,22 @@ def train_agent(df: pd.DataFrame, target_request: str, tree_depth: int, n_estima
 
 def render_metrics() -> None:
     profile = st.session_state.data_profile or {}
-    result = st.session_state.train_result or {}
+    result  = st.session_state.train_result or {}
+    cv_mean = result.get("cv_mean_accuracy", result.get("rf_accuracy", 0))
+    cv_std  = result.get("cv_std", 0.0)
+    cv_label = (
+        f"{cv_mean:.0%} ±{cv_std:.2f}"
+        if cv_std > 0
+        else f"{cv_mean:.0%}"
+    )
+    shap_badge = "SHAP ✓" if result.get("shap_available") else "Perm. Imp."
     st.markdown(
         f"""
 <div class="metric-grid">
     <div class="metric"><span class="value">{profile.get('rows', 0):,}</span><span class="label">Rows Learned</span></div>
     <div class="metric"><span class="value">{profile.get('columns', 0):,}</span><span class="label">Signals</span></div>
-    <div class="metric"><span class="value">{result.get('rf_accuracy', 0):.0%}</span><span class="label">Model Accuracy</span></div>
-    <div class="metric"><span class="value">{result.get('n_rules', 0):,}</span><span class="label">Reasoning Rules</span></div>
+    <div class="metric"><span class="value">{cv_label}</span><span class="label">5-Fold CV Accuracy</span></div>
+    <div class="metric"><span class="value">{result.get('n_rules', 0):,}</span><span class="label">Rules · {shap_badge}</span></div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -791,72 +770,81 @@ init_state()
 
 
 with st.sidebar:
-    st.markdown("## Analyst ML Chatbot")
+    st.markdown("## Data Analyst Agent")
+    st.caption("Offline ML · AI-structured pipeline")
     st.divider()
 
     source = st.radio(
         "Data source",
-        ["Upload data", "Paste text", "Generate sample sales data", "Use local file path"],
-        index=2,
+        ["Upload file", "Local file path", "Generate demo data"],
+        index=0,
     )
 
-    uploaded = None
-    pasted_text = ""
-    local_path = ""
-    rows = SAMPLE_ROWS
+    uploaded      = None
+    local_path    = ""
+    selected_sheet: str | None = None
+    rows          = SAMPLE_ROWS
 
-    if source == "Upload data":
-        uploaded = st.file_uploader("CSV, Excel, JSON, or TXT", type=["csv", "xlsx", "xls", "json", "txt"])
+    if source == "Upload file":
+        uploaded = st.file_uploader(
+            "CSV or Excel (.csv, .xlsx, .xls)",
+            type=["csv", "xlsx", "xls"],
+        )
         if uploaded is not None:
-            st.info(f"Selected `{uploaded.name}`. Click Train agent to learn it.")
-    elif source == "Paste text":
-        pasted_text = st.text_area("Paste notes, documents, or raw text", height=180)
-    elif source == "Generate sample sales data":
-        rows = st.slider("Rows", 1_000, 50_000, SAMPLE_ROWS, step=1_000)
-    else:
-        local_path = st.text_input("File path", value="")
+            _is_excel = uploaded.name.lower().endswith((".xlsx", ".xls"))
+            if _is_excel:
+                _sheets = get_excel_sheets(uploaded)
+                if len(_sheets) > 1:
+                    selected_sheet = st.selectbox(
+                        f"Sheet to train on ({len(_sheets)} sheets found)",
+                        _sheets,
+                    )
+                    # Show a quick overview of every sheet's column count
+                    _sheet_info = []
+                    for _sn in _sheets:
+                        try:
+                            _peek = pd.read_excel(
+                                io.BytesIO(uploaded.getvalue()),
+                                sheet_name=_sn, engine="openpyxl", nrows=1,
+                            )
+                            _sheet_info.append(f"**{_sn}** — {len(_peek.columns)} cols")
+                        except Exception:
+                            _sheet_info.append(f"**{_sn}** — unreadable")
+                    st.caption("  ·  ".join(_sheet_info))
+                elif _sheets:
+                    selected_sheet = _sheets[0]
+            st.success(f"Ready: `{uploaded.name}`")
 
-    st.divider()
-    st.markdown("### AI provider")
-    provider = st.selectbox(
-        "Chat engine",
-        ["Offline ML", "Groq", "xAI Grok", "OpenRouter", "Custom"],
-        index=["Offline ML", "Groq", "xAI Grok", "OpenRouter", "Custom"].index(
-            st.session_state.get("api_provider", "Offline ML")
-        ),
-    )
-    st.session_state.api_provider = provider
+    elif source == "Local file path":
+        local_path = st.text_input("Full file path (.csv, .xlsx, .xls)", value="")
+        if local_path.strip():
+            _lp = Path(local_path.strip())
+            if _lp.exists() and _lp.suffix.lower() in (".xlsx", ".xls"):
+                try:
+                    _sheets = pd.ExcelFile(_lp, engine="openpyxl").sheet_names
+                    if len(_sheets) > 1:
+                        selected_sheet = st.selectbox(
+                            f"Sheet ({len(_sheets)} found)", _sheets
+                        )
+                    elif _sheets:
+                        selected_sheet = _sheets[0]
+                except Exception:
+                    pass
 
-    if provider != "Offline ML":
-        default_base, default_model = provider_settings(
-            provider,
-            st.session_state.get("api_base_url", ""),
-            st.session_state.get("api_model", ""),
-        )
-        st.session_state.api_key = st.text_input(
-            "API key",
-            value=st.session_state.get("api_key", ""),
-            type="password",
-            placeholder="Paste provider key",
-        )
-        st.session_state.api_model = st.text_input("Model", value=st.session_state.get("api_model") or default_model)
-        if provider == "Custom":
-            st.session_state.api_base_url = st.text_input(
-                "Chat completions URL",
-                value=st.session_state.get("api_base_url") or default_base,
-                placeholder="https://api.example.com/v1/chat/completions",
-            )
-        else:
-            st.caption(default_base)
+    else:  # Generate demo data
+        rows = st.slider("Demo rows", 1_000, 50_000, SAMPLE_ROWS, step=1_000)
 
     st.divider()
     st.markdown("### Training")
-    target_request = st.text_input("Target column or outcome", value=st.session_state.target_col or "")
-    tree_depth = st.slider("Reasoning depth", 2, 12, 6)
-    n_estimators = st.slider("Forest trees", 50, 500, 250, step=50)
+    target_request = st.text_input(
+        "Target column (blank = auto-detect)",
+        value=st.session_state.target_col or "",
+    )
+    tree_depth   = st.slider("Reasoning depth", 2, 12, 6)
+    n_estimators = st.slider("Forest trees", 50, 500, 150, step=50)
 
     train_clicked = st.button("Train agent", use_container_width=True)
-    reset_clicked = st.button("Reset chat", use_container_width=True)
+    reset_clicked = st.button("Reset", use_container_width=True)
 
     if reset_clicked:
         st.session_state.chat = []
@@ -868,55 +856,101 @@ with st.sidebar:
         st.write(f"Target: `{st.session_state.target_col}`")
         st.write(f"Random Forest: `{st.session_state.train_result['rf_accuracy']:.1%}`")
         st.write(f"Decision Tree: `{st.session_state.train_result['dt_accuracy']:.1%}`")
+        _cv = st.session_state.train_result.get("cv_mean_accuracy")
+        _cvs = st.session_state.train_result.get("cv_std", 0.0)
+        if _cv:
+            st.write(f"5-fold CV: `{_cv:.1%} ±{_cvs:.3f}`")
+        if st.session_state.train_result.get("shap_available"):
+            st.caption("Importance: SHAP ✓")
 
 
+# ---------------------------------------------------------------------------
+# Train button handler
+# ---------------------------------------------------------------------------
 if train_clicked:
     try:
-        with st.spinner("Reading data and fitting the local ML agent..."):
-            if source == "Upload data":
+        with st.spinner("Structuring data and training offline ML model..."):
+
+            if source == "Upload file":
                 if uploaded is None:
                     st.error("Upload a file first.")
                     st.stop()
-                raw_df = read_uploaded_file(uploaded)
-            elif source == "Paste text":
-                if not pasted_text.strip():
-                    st.error("Paste some text first.")
-                    st.stop()
-                raw_df = text_to_frame(pasted_text)
-            elif source == "Generate sample sales data":
-                raw_df = dl.generate_synthetic_data(n_rows=rows)
-            else:
+
+                _is_excel = uploaded.name.lower().endswith((".xlsx", ".xls"))
+                if _is_excel:
+                    # Read the chosen sheet → clean in-memory (Excel can't be streamed)
+                    _sheet = selected_sheet if selected_sheet is not None else 0
+                    _raw = read_excel_sheet(uploaded, _sheet)
+                    raw_df, _rules, _ = _gc.clean_dataframe(_raw, api_key=_GROQ_API_KEY)
+                else:
+                    # CSV → write to temp, use chunked streaming reader
+                    _tmp_path = tempfile.mktemp(suffix=".csv")
+                    try:
+                        with open(_tmp_path, "wb") as _f:
+                            _f.write(uploaded.getvalue())
+                        raw_df, _rules, _ = _gc.clean_large_file(
+                            _tmp_path, api_key=_GROQ_API_KEY
+                        )
+                    finally:
+                        Path(_tmp_path).unlink(missing_ok=True)
+
+                target_request = _rules.get("target") or target_request
+
+            elif source == "Local file path":
                 if not local_path.strip():
-                    st.error("Enter a local file path first.")
+                    st.error("Enter a file path first.")
                     st.stop()
-                raw_df = read_local_file(local_path.strip())
+                _lp = Path(local_path.strip())
+                if not _lp.exists():
+                    st.error(f"File not found: {_lp}")
+                    st.stop()
+
+                if _lp.suffix.lower() in (".xlsx", ".xls"):
+                    _sheet = selected_sheet if selected_sheet is not None else 0
+                    _raw = read_excel_sheet(_lp, _sheet)
+                    raw_df, _rules, _ = _gc.clean_dataframe(_raw, api_key=_GROQ_API_KEY)
+                else:
+                    raw_df, _rules, _ = _gc.clean_large_file(
+                        str(_lp), api_key=_GROQ_API_KEY
+                    )
+                target_request = _rules.get("target") or target_request
+
+            else:  # Generate demo data
+                raw_df = dl.generate_synthetic_data(n_rows=rows)
 
             train_agent(raw_df, target_request, tree_depth, n_estimators)
+
         st.success("Agent trained and ready to chat.")
         st.rerun()
+
     except Exception as exc:
         st.error(f"Training failed: {exc}")
+        with st.expander("Error detail"):
+            st.code(_tb.format_exc())
 
 
-trained = st.session_state.train_result is not None
-status = "Model trained" if trained else "No data required to start"
-target_text = st.session_state.target_col or "auto-selected after training"
-data_text = (
-    f"{st.session_state.data_profile['rows']:,} rows active"
+# ---------------------------------------------------------------------------
+# Status header
+# ---------------------------------------------------------------------------
+trained     = st.session_state.train_result is not None
+status      = "Model trained" if trained else "Ready — upload a file to begin"
+target_text = st.session_state.target_col or "auto-detected after training"
+data_text   = (
+    f"{st.session_state.data_profile['rows']:,} rows"
     if st.session_state.data_profile
-    else "upload, paste, or generate data"
+    else "no data loaded"
 )
 
 st.markdown(
     f"""
 <section class="app-head">
     <div class="app-head-row">
-        <div class="app-title">Analyst Chatbot</div>
+        <div class="app-title">Data Analyst Agent</div>
         <div class="status-row">
             <div class="status-pill">{status}</div>
             <div class="status-pill">Target: {target_text}</div>
             <div class="status-pill">{data_text}</div>
-            <div class="status-pill">{st.session_state.get("api_provider", "Offline ML")}</div>
+            <div class="status-pill">Offline ML</div>
         </div>
     </div>
 </section>
@@ -984,12 +1018,26 @@ if st.session_state.df_raw is not None:
             st.dataframe(st.session_state.df_raw.head(30), use_container_width=True, height=360)
         with tabs[1]:
             if st.session_state.train_result and Path("feature_importances.pkl").exists():
-                imp = trainer.load_importances()["importances"]
+                imp_payload = trainer.load_importances()
+                # Prefer SHAP importances (more accurate); fall back to permutation importance
+                shap_imp = imp_payload.get("shap_importances", {})
+                perm_imp = imp_payload.get("importances", {})
+                imp_source = shap_imp if shap_imp else perm_imp
+                imp_label  = "SHAP Mean |value|" if shap_imp else "Permutation Importance"
                 ranked_imp = pd.DataFrame(
-                    sorted(imp.items(), key=lambda item: item[1], reverse=True)[:15],
+                    sorted(imp_source.items(), key=lambda item: item[1], reverse=True)[:15],
                     columns=["feature", "importance"],
                 )
+                st.caption(f"Driver ranking method: **{imp_label}**")
                 st.bar_chart(ranked_imp.set_index("feature"))
+                # Also show CV accuracy note if available
+                cv_mean = st.session_state.train_result.get("cv_mean_accuracy")
+                cv_std  = st.session_state.train_result.get("cv_std", 0.0)
+                if cv_mean and cv_std > 0:
+                    st.caption(
+                        f"5-fold cross-validation accuracy: **{cv_mean:.1%} ± {cv_std:.3f}** "
+                        "(generalisation estimate, more reliable than single train/test split)"
+                    )
             else:
                 st.info("Train the model to see drivers.")
         with tabs[2]:
