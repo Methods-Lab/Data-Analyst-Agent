@@ -514,42 +514,47 @@ def dataset_context_for_llm(prompt: str) -> str:
 
 def call_external_ai(prompt: str, local_answer: str) -> str | None:
     """
-    Ask Groq for an ADDITIONAL explanation that appears after the local ML answer.
-    Never replaces the ML output — always additive.
-    Returns None silently on failure so the ML answer is still shown alone.
+    Plain-language bullet-point explanation grounded in the ACTUAL DATA,
+    written for a non-technical reader. Always additive — never replaces the ML output.
+    Returns None silently on failure.
     """
     if not _GROQ_API_KEY:
         return None
     try:
         from groq import Groq
-        client   = Groq(api_key=_GROQ_API_KEY)
+        client = Groq(api_key=_GROQ_API_KEY)
         response = client.chat.completions.create(
             model=_GROQ_MODEL,
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "You are a senior data analyst providing an AI explanation that sits "
-                        "BELOW an offline ML model's answer. Your job is to explain WHY the ML "
-                        "result makes sense, add business context, highlight what to act on, or "
-                        "flag anything the ML answer doesn't cover. "
-                        "Be direct and concise — 80 to 130 words. "
-                        "Do NOT repeat numbers or facts already stated in the ML answer. "
-                        "Do NOT start with 'The ML model says' or similar phrases."
+                        "You are explaining a dataset to someone with no technical background — "
+                        "think of them as a business owner or manager who just wants to understand "
+                        "their data in plain English.\n\n"
+                        "Rules you must follow:\n"
+                        "• Always respond in 4 to 6 bullet points (use the • symbol).\n"
+                        "• Use simple, everyday language — no jargon, no technical terms.\n"
+                        "• Each bullet must say something directly about the ACTUAL DATA "
+                        "(columns, values, patterns, trends) — not about models or algorithms.\n"
+                        "• Make each point practical and actionable: what does this mean for the business?\n"
+                        "• Keep each bullet to one clear sentence.\n"
+                        "• Do NOT use words like: model, algorithm, ML, training, accuracy, feature, "
+                        "vector, classifier, hyperparameter, or any other technical term."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        f"User question: {prompt}\n\n"
-                        f"Dataset context (from the trained model):\n{dataset_context_for_llm(prompt)}\n\n"
-                        f"ML model's answer (already shown to user — do not repeat it):\n{local_answer}\n\n"
-                        "Write your additional AI explanation now:"
+                        f"The user asked: \"{prompt}\"\n\n"
+                        f"Here is the actual data information:\n{dataset_context_for_llm(prompt)}\n\n"
+                        "Now write 4 to 6 plain-English bullet points explaining what this data "
+                        "shows and what it means, based directly on the data above."
                     ),
                 },
             ],
-            temperature=0.4,
-            max_tokens=220,
+            temperature=0.5,
+            max_tokens=320,
         )
         return response.choices[0].message.content.strip()
     except Exception:
