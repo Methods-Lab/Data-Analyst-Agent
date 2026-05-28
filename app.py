@@ -716,29 +716,35 @@ def answer_with_data(prompt: str) -> str:
     )
 
 
+_GENERIC_ML_FALLBACKS = (
+    "Here is the analyst read from the active data",
+    "I can help as a data analyst right now",
+)
+
 def generate_response(prompt: str) -> str:
     local_answer = answer_with_data(prompt)
     groq_answer  = call_external_ai(prompt, local_answer)
 
-    low = prompt.lower()
-    # For predict/deduce queries the ML result (prediction + confidence) is
-    # the core output — show it first, then Groq explains it.
-    is_predict_query = any(w in low for w in ["predict", "classify", "if "]) and \
-                       st.session_state.train_result is not None
+    # Detect when the ML engine returned a generic fallback instead of a
+    # meaningful data answer (keyword didn't match anything specific).
+    ml_is_generic = any(local_answer.startswith(f) for f in _GENERIC_ML_FALLBACKS)
 
     if groq_answer:
-        if is_predict_query:
-            # ML result first, AI explanation below
+        if ml_is_generic:
+            # ML had nothing useful to say — Groq answers the question directly
+            # (covers: conversational messages, open-ended questions, no-data state)
+            return groq_answer
+        else:
+            # ML gave a meaningful answer (summary, drivers, prediction, etc.)
+            # Show it first, then the labeled AI Explanation below
             return (
                 f"{local_answer}\n\n"
                 "---\n"
                 "**AI Explanation**\n\n"
                 f"{groq_answer}"
             )
-        # For everything else Groq IS the answer — no boilerplate ML text
-        return groq_answer
 
-    # Groq unavailable — fall back to local ML answer
+    # Groq unavailable — show ML answer only
     return local_answer
 
 
