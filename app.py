@@ -757,43 +757,51 @@ def answer_with_data(prompt: str) -> str:
     )
 
 
+# ML responses that mean "I have nothing specific to say"
+_ML_GENERIC = (
+    "Here is the analyst read from the active data",
+    "I can help as a data analyst right now",
+)
+
 def generate_response(prompt: str) -> str:
     """
-    Route every message through Groq as the primary AI agent.
+    Always produce two visible sections so the user can clearly see
+    what came from the offline ML model and what came from AI.
 
-    Groq gets the full data context (actual rows, column breakdowns, percentages)
-    and answers the user's exact question — no hardcoded keyword matching.
+    Structured data queries (summarize, drivers, missing values, predict, why …):
+        [ML computed result]
+        ---
+        AI Explanation
+        [Groq's data-grounded insight]
 
-    The only exception: explicit predict queries (e.g. "predict if qty=5")
-    show the ML model's computed prediction first, then Groq explains it.
+    Open-ended / conversational questions (the ML has no specific answer):
+        AI Analysis
+        [Groq answers directly from actual data]
+
+    If Groq is unavailable:
+        [ML answer only]
     """
-    low = prompt.lower()
+    ml_answer   = answer_with_data(prompt)
+    groq_answer = call_external_ai(prompt, ml_answer)
 
-    # Detect explicit predict-with-values query
-    is_predict = (
-        any(w in low for w in ["predict if", "classify if", "predict if "])
-        and st.session_state.train_result is not None
-    )
+    # Decide whether the ML produced something meaningful
+    ml_useful = not any(ml_answer.startswith(p) for p in _ML_GENERIC)
 
-    if is_predict:
-        ml_prediction = answer_with_data(prompt)   # ML computes the actual prediction
-        groq_answer   = call_external_ai(prompt, ml_prediction)
-        if groq_answer:
+    if groq_answer:
+        if ml_useful:
+            # Show ML result first, then labeled AI Explanation below
             return (
-                f"{ml_prediction}\n\n"
+                f"{ml_answer}\n\n"
                 "---\n"
                 "**AI Explanation**\n\n"
                 f"{groq_answer}"
             )
-        return ml_prediction
+        else:
+            # ML had no specific answer — show Groq's response labeled as AI Analysis
+            return f"**AI Analysis**\n\n{groq_answer}"
 
-    # All other questions — Groq answers directly from the actual data
-    groq_answer = call_external_ai(prompt, "")
-    if groq_answer:
-        return groq_answer
-
-    # Groq unavailable — fall back to ML keyword matching
-    return answer_with_data(prompt)
+    # Groq unavailable — show ML answer only
+    return ml_answer
 
 
 def train_agent(df: pd.DataFrame, target_request: str, tree_depth: int, n_estimators: int) -> None:
