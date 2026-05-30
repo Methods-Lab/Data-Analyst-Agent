@@ -795,26 +795,34 @@ def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
 
         if has_data:
             data_context = dataset_context_for_llm(prompt)
+            available_cols = list(st.session_state.df_raw.columns)
+            cols_preview = ", ".join(available_cols[:20])
             system_content = (
-                "You are an AI data analyst with FULL access to the user's uploaded dataset. "
-                "Answer ANY question about the data.\n\n"
-                "OUTPUT FORMAT — this is critical, follow EXACTLY:\n\n"
-                "For data-analysis questions, write the response as MARKDOWN with this exact structure:\n\n"
+                "You are an AI data analyst answering questions about the user's dataset.\n\n"
+                "ANTI-HALLUCINATION RULES (MOST IMPORTANT):\n"
+                "1. If the user's question references a column, name, person, concept, or entity "
+                "that is NOT in the dataset's actual columns or values, you MUST respond with EXACTLY this format "
+                "(no bullets, no bold headline):\n"
+                "   \"I don't see [the thing they asked about] in your data. "
+                "Your data has these columns: [list 5-10 actual column names]. "
+                "Did you mean one of those?\"\n"
+                "2. NEVER invent statistics, percentages, or predictions about things not in the dataset. "
+                "If the user asks about 'ahmed', 'john's revenue', 'XYZ trend', or any unknown name/concept — refuse and list real columns.\n"
+                "3. Only answer with the bulleted format below when the question CLEARLY refers to actual columns/values in the data.\n\n"
+                "OUTPUT FORMAT for VALID data-analysis questions:\n\n"
                 "**One bold headline sentence here.**\n\n"
                 "- First bullet on its own line\n"
                 "- Second bullet on its own line\n"
                 "- Third bullet on its own line\n"
                 "- Fourth bullet on its own line\n\n"
-                "Rules:\n"
-                "1. Put a REAL NEWLINE between each bullet — NEVER put bullets on the same line.\n"
-                "2. Put a BLANK LINE between the headline and the first bullet.\n"
-                "3. Each bullet starts with '- ' (dash space) and is max 15 words.\n"
-                "4. Each bullet must contain a specific number, column name, or percentage from the data.\n"
-                "5. Total 3 to 4 bullets only.\n\n"
-                "For conversational messages (hi, thanks, how are you): one natural sentence, no bullets.\n"
-                "For simple lookups (file name, row count): one clear sentence, no bullets.\n\n"
-                "Content: use real column names + real numbers from the data. Plain English. "
-                "Maximum 140 words total."
+                "Formatting rules:\n"
+                "- Real newline between bullets. Blank line after headline.\n"
+                "- Each bullet starts with '- ', max 15 words, contains a real number / column / percentage.\n"
+                "- 3 to 4 bullets total.\n\n"
+                "For conversational messages (hi, thanks): one natural sentence.\n"
+                "For simple lookups (file name, row count): one clear sentence.\n\n"
+                f"Available columns in this dataset: {cols_preview}\n"
+                "Plain English only. Max 140 words."
             )
             user_content = (
                 f"User's question: \"{prompt}\"\n\n"
@@ -2076,8 +2084,30 @@ with chat_col:
             _send = st.form_submit_button("➤", use_container_width=True)
 
     if _send and _typed.strip():
-        st.session_state.chat.append({"role": "user", "content": _typed.strip()})
-        st.session_state.chat.append({"role": "assistant", "content": generate_response(_typed.strip())})
+        _txt = _typed.strip()
+        # Pre-validate explicit column references (only words with underscore/digit
+        # — plain English words pass through to the LLM which has its own guard rails)
+        if st.session_state.df_raw is not None:
+            _txt_resolved, _fixes, _unresolved = _resolve_column_refs(
+                _txt, st.session_state.df_raw.columns.tolist()
+            )
+            # Only block if there are clearly-malformed column tokens
+            # (contain underscore or digit) — common English words won't trigger
+            _strict_unresolved = [w for w in _unresolved if ("_" in w or any(c.isdigit() for c in w))]
+            if _strict_unresolved:
+                _cols = ", ".join(f"`{c}`" for c in st.session_state.df_raw.columns[:10])
+                _msg  = (
+                    f"I don't see {', '.join(f'`{u}`' for u in _strict_unresolved)} "
+                    f"in your data.\n\nYour data has these columns: {_cols}.\n\n"
+                    "Try again using one of the actual column names above."
+                )
+                st.session_state.chat.append({"role": "user", "content": _txt})
+                st.session_state.chat.append({"role": "assistant", "content": _msg})
+                st.rerun()
+            if _fixes:
+                _txt = _txt_resolved
+        st.session_state.chat.append({"role": "user", "content": _txt})
+        st.session_state.chat.append({"role": "assistant", "content": generate_response(_txt)})
         st.rerun()
 
     # Quick-chip suggestions — small buttons that auto-send when clicked
