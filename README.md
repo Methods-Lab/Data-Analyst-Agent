@@ -18,7 +18,7 @@ Example questions:
 
 ```text
 Summarize this dataset
-What are the top drivers?
+What are the top drivers?.
 Show missing values
 Why high?
 Predict if quantity=5 and discount_pct=10
