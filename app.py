@@ -1232,6 +1232,77 @@ def _emit_chat_pair(user_msg: str, ml_answer: str) -> None:
 # Prediction helpers — all use ML libraries (sklearn), no AI
 # ---------------------------------------------------------------------------
 
+def _resolve_column_refs(
+    text: str,
+    df_columns: list[str],
+) -> tuple[str, list[tuple[str, str]], list[str]]:
+    """
+    Scan user-typed text for column-like words and validate them against the
+    dataset's actual columns.
+
+    Returns:
+        corrected_text   — text with close matches auto-corrected
+        corrections      — list of (original, matched) tuples for what was fixed
+        unresolved       — list of words that look like columns but don't match
+                            any column closely enough
+
+    A word is treated as a column reference if it:
+      - is 3+ chars
+      - is not a common English/analyst stop-word
+      - contains an underscore OR digit OR is all-lowercase 4+ chars
+    """
+    from difflib import get_close_matches
+
+    STOP = {
+        "the", "and", "for", "with", "predict", "forecast", "based",
+        "will", "this", "that", "have", "are", "has", "can", "all",
+        "next", "month", "months", "year", "years", "data", "values",
+        "value", "column", "columns", "using", "over", "time", "series",
+        "show", "tell", "about", "give", "find", "how", "what", "which",
+        "would", "could", "should", "feature", "features", "row", "rows",
+        "trends", "trend", "average", "median", "mean", "max", "min",
+        "sum", "total", "count", "based", "outcome", "regression",
+        "classify", "classification", "from", "into",
+    }
+
+    pattern = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]{2,})\b")
+    cols_lower_to_orig = {c.lower(): c for c in df_columns}
+    cols_lower_list    = list(cols_lower_to_orig.keys())
+
+    corrected = text
+    corrections: list[tuple[str, str]] = []
+    unresolved: list[str] = []
+    seen: set[str] = set()
+
+    for match in pattern.finditer(text):
+        word = match.group(1)
+        if word.lower() in STOP or word.lower() in seen:
+            continue
+        # Heuristic: likely a column ref
+        looks_like_col = (
+            "_" in word
+            or any(c.isdigit() for c in word)
+            or (word.islower() and len(word) >= 4)
+        )
+        if not looks_like_col:
+            continue
+
+        seen.add(word.lower())
+
+        if word.lower() in cols_lower_to_orig:
+            continue  # exact match
+
+        close = get_close_matches(word.lower(), cols_lower_list, n=1, cutoff=0.72)
+        if close:
+            matched_col = cols_lower_to_orig[close[0]]
+            corrections.append((word, matched_col))
+            corrected = re.sub(rf"\b{re.escape(word)}\b", matched_col, corrected)
+        else:
+            unresolved.append(word)
+
+    return corrected, corrections, unresolved
+
+
 def _detect_date_cols(df: pd.DataFrame) -> list[str]:
     """Return columns that look like dates/timestamps."""
     out = []
@@ -1395,40 +1466,36 @@ def predict_dialog() -> None:
     if date_cols:
         for col in num_excl_tgt[:3]:
             options.append({
-                "kind":    "forecast",
-                "icon":    "📊",
-                "label":   f"Forecast **{col}** trends over time (time-series prediction)",
-                "value":   col,
-                "date":    date_cols[0],
+                "kind":   "forecast",
+                "label":  f"Forecast {col} trends over time (time-series)",
+                "value":  col,
+                "date":   date_cols[0],
             })
 
     # Classification using existing trained target
     if target and classes:
         options.append({
             "kind":   "classify",
-            "icon":   "🏷️",
-            "label":  f"Classify new records into **{target}** ({', '.join(classes)})",
+            "label":  f"Classify new records into {target}  ({', '.join(classes)})",
         })
 
     # Regression for each numeric column
     for col in num_excl_tgt[:3]:
         options.append({
             "kind":   "regress",
-            "icon":   "📈",
-            "label":  f"Predict **{col}** based on other features",
+            "label":  f"Predict {col} based on other features (regression)",
             "value":  col,
         })
 
     # Custom always last
     options.append({
         "kind":   "custom",
-        "icon":   "📝",
-        "label":  "Custom prediction — set your own values for the trained target",
+        "label":  "Custom prediction — describe in your own words",
     })
 
     # ---- header: numbered list of options + available columns ----
     st.markdown("**Based on your loaded dataset, here are the predictions I can make:**")
-    listing_lines = [f"{i + 1}. {opt['icon']} {opt['label']}" for i, opt in enumerate(options)]
+    listing_lines = [f"{i + 1}. {opt['label']}" for i, opt in enumerate(options)]
     st.markdown("\n".join(listing_lines))
 
     cols_shown = ", ".join(f"`{c}`" for c in df.columns[:14])
@@ -1437,12 +1504,12 @@ def predict_dialog() -> None:
 
     st.divider()
 
-    # ---- selection radio (numbered, with markdown bold stripped) ----
+    # ---- selection radio (numbered, professional — no icons) ----
     _bold_re = re.compile(r"\*\*(.+?)\*\*")
     radio_labels = []
     for i, opt in enumerate(options):
         plain = _bold_re.sub(r"\1", opt["label"])
-        radio_labels.append(f"{i + 1}. {opt['icon']} {plain}")
+        radio_labels.append(f"{i + 1}. {plain}")
     chosen_label = st.radio("Pick an option:", radio_labels, key="predict_main_choice")
     chosen_idx   = int(chosen_label.split(".", 1)[0]) - 1
     chosen       = options[chosen_idx]
@@ -1520,7 +1587,7 @@ def predict_dialog() -> None:
             _emit_chat_pair(f"Predict {target_num} given {facts_str}", ml)
             st.rerun()
 
-    else:  # custom — free text prediction request handled by AI
+    else:  # custom — free text prediction request, validated against actual columns
         free_text = st.text_area(
             "Describe what you want to predict:",
             placeholder="e.g. \"Forecast monthly net_sales for the next 3 months\"",
@@ -1530,11 +1597,32 @@ def predict_dialog() -> None:
             if not free_text.strip():
                 st.warning("Type a prediction request first.")
                 return
-            ml = (
-                "I'll treat this as a free-form prediction request. "
-                "The AI will interpret your request against the actual data."
+
+            # Validate column references against the actual dataset
+            corrected, fixes, unresolved = _resolve_column_refs(
+                free_text.strip(), df.columns.tolist()
             )
-            _emit_chat_pair(free_text.strip(), ml)
+
+            if unresolved:
+                cols_preview = ", ".join(f"`{c}`" for c in df.columns[:12])
+                more = f" *(+{len(df.columns) - 12} more)*" if len(df.columns) > 12 else ""
+                st.error(
+                    "These names don't match any column in your data: "
+                    + ", ".join(f"`{u}`" for u in unresolved)
+                    + f".\n\n**Available columns:** {cols_preview}{more}\n\n"
+                    "Try again using one of the actual column names above."
+                )
+                return
+
+            if fixes:
+                fix_str = ", ".join(f"`{a}` → `{b}`" for a, b in fixes)
+                st.info(f"Auto-corrected close matches: {fix_str}")
+
+            ml = (
+                "Free-form prediction request — interpreting against the trained "
+                "model and actual dataset columns."
+            )
+            _emit_chat_pair(corrected, ml)
             st.rerun()
 
 
