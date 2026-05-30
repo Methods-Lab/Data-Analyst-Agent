@@ -1228,132 +1228,314 @@ def _emit_chat_pair(user_msg: str, ml_answer: str) -> None:
     st.session_state.chat.append({"role": "assistant", "content": final})
 
 
+# ---------------------------------------------------------------------------
+# Prediction helpers — all use ML libraries (sklearn), no AI
+# ---------------------------------------------------------------------------
+
+def _detect_date_cols(df: pd.DataFrame) -> list[str]:
+    """Return columns that look like dates/timestamps."""
+    out = []
+    for c in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[c]):
+            out.append(c)
+            continue
+        if df[c].dtype == object and any(k in str(c).lower() for k in ("date", "time", "month", "year")):
+            try:
+                parsed = pd.to_datetime(df[c], errors="coerce")
+                if parsed.notna().sum() > len(df) * 0.5:
+                    out.append(c)
+            except Exception:
+                pass
+    return out
+
+
+def _run_forecast(df: pd.DataFrame, value_col: str, date_col: str, periods: int = 6) -> str:
+    """Simple linear-trend forecast on a numeric column over time. Returns markdown."""
+    from sklearn.linear_model import LinearRegression
+    try:
+        df_ts = df[[date_col, value_col]].copy()
+        df_ts[date_col] = pd.to_datetime(df_ts[date_col], errors="coerce")
+        df_ts = df_ts.dropna().sort_values(date_col)
+        if len(df_ts) < 5:
+            return f"Not enough date-stamped rows to forecast `{value_col}`."
+        df_ts = df_ts.set_index(date_col).resample("ME")[value_col].mean().dropna()
+        if len(df_ts) < 3:
+            return f"After grouping by month, not enough points to forecast `{value_col}`."
+
+        X = np.arange(len(df_ts)).reshape(-1, 1)
+        y = df_ts.values.astype(float)
+        model = LinearRegression().fit(X, y)
+        future_X = np.arange(len(df_ts), len(df_ts) + periods).reshape(-1, 1)
+        forecast = model.predict(future_X)
+        future_dates = pd.date_range(start=df_ts.index[-1], periods=periods + 1, freq="ME")[1:]
+
+        trend  = "increasing 📈" if model.coef_[0] > 0 else "decreasing 📉"
+        avg    = float(df_ts.mean())
+        change = (forecast[-1] - df_ts.values[-1]) / max(abs(df_ts.values[-1]), 1) * 100
+
+        forecast_lines = [
+            f"- {d.strftime('%Y-%m')}: **{v:,.2f}**"
+            for d, v in zip(future_dates, forecast)
+        ]
+        return (
+            f"**Forecast for `{value_col}` — {trend} trend**\n\n"
+            f"Historical monthly average: **{avg:,.2f}** "
+            f"(over {len(df_ts)} months)\n\n"
+            f"Projected change end-of-horizon: **{change:+.1f}%**\n\n"
+            f"**Next {periods} months projected:**\n" + "\n".join(forecast_lines)
+        )
+    except Exception as exc:
+        return f"Could not build forecast for `{value_col}`: {exc}"
+
+
+def _run_regression(df: pd.DataFrame, target_num: str, user_facts: dict) -> str:
+    """Train a quick RF regressor and predict target_num given user_facts. Returns markdown."""
+    from sklearn.ensemble import RandomForestRegressor
+    try:
+        feat_cols = [c for c in df.select_dtypes(include=[np.number]).columns if c != target_num]
+        if not feat_cols:
+            return f"No numeric features available to predict `{target_num}`."
+        X = df[feat_cols].fillna(df[feat_cols].median(numeric_only=True))
+        y = df[target_num].fillna(df[target_num].median())
+        rf = RandomForestRegressor(n_estimators=80, random_state=42, n_jobs=-1).fit(X, y)
+
+        # Build input row: defaults from medians, override with user facts
+        row = {c: float(X[c].median()) for c in feat_cols}
+        applied = {}
+        for k, v in user_facts.items():
+            if k in row:
+                try:
+                    row[k] = float(v); applied[k] = v
+                except ValueError:
+                    pass
+
+        pred = float(rf.predict(pd.DataFrame([row]))[0])
+        imp = sorted(zip(feat_cols, rf.feature_importances_), key=lambda x: -x[1])[:5]
+        train_score = float(rf.score(X, y))
+
+        facts_str = ", ".join(f"`{k}={v}`" for k, v in applied.items()) or "median defaults"
+        return (
+            f"**Predicted `{target_num}` = `{pred:,.2f}`**\n\n"
+            f"Based on: {facts_str}\n"
+            f"Model R² on training data: **{train_score:.1%}**\n\n"
+            "**Most important features for this prediction:**\n"
+            + "\n".join(f"- **{f}** — weight {s:.3f}" for f, s in imp)
+        )
+    except Exception as exc:
+        return f"Regression failed: {exc}"
+
+
+def _run_classification_for_class(chosen_class: str, target: str) -> str:
+    """Abduction: explain which features lead to chosen_class. Returns markdown."""
+    try:
+        imp_result = reasoner.abduce(chosen_class, top_k=5)
+        lines = [f"**Best explanation for outcome `{chosen_class}`:**", ""]
+        for c in imp_result["causes"]:
+            lines.append(
+                f"- **{c['feature']}** — importance {c['importance']:.4f}. {c['direction_hint']}."
+            )
+        if st.session_state.df_clean is not None:
+            bayes = try_bayesian_abduce(st.session_state.df_clean, chosen_class, target, top_k=3)
+            if bayes:
+                lines.extend(["", "**Bayesian posterior hints:**"])
+                for b in bayes:
+                    lines.append(
+                        f"- **{b['feature']}** around {b['feature_value_range']} — score {b['posterior_score']:.4f}"
+                    )
+        return "\n".join(lines)
+    except Exception as exc:
+        return f"Classification analysis failed: {exc}"
+
+
+def _run_custom_classification(parsed: dict, target: str) -> str:
+    """Deduction with user-supplied feature values. Returns markdown."""
+    try:
+        results = reasoner.deduce(parsed, top_k=3)
+        if not results:
+            return "No rule matched those values. Try fewer or different values."
+        top = results[0]
+        facts_str = ", ".join(f"`{k}={v}`" for k, v in parsed.items())
+        return (
+            f"**Prediction for `{target}`: `{top['prediction']}`** "
+            f"({top['confidence']:.0%} rule confidence · {top['match_score']:.0%} fact match)\n\n"
+            f"Based on your inputs: {facts_str}\n\n"
+            "**Supporting rule conditions:**\n"
+            + "\n".join(f"- {cond}" for cond in top["conditions"][:8])
+        )
+    except Exception as exc:
+        return f"Prediction failed: {exc}"
+
+
 @st.dialog("Make a prediction", width="large")
 def predict_dialog() -> None:
     """
-    Lists all possible target classes the ML model knows about, plus a
-    'Custom' option that lets the user set feature values. The ML model
-    (RandomForest / DecisionTree rules) computes the result; AI explains it.
+    Lists all prediction types this specific dataset supports — time-series
+    forecasts (if dates exist), classification (using trained target),
+    regression on each numeric column, and a free-form custom option.
+    Picks are dispatched to the matching ML helper above.
     """
-    result = st.session_state.train_result
-    if not result:
-        st.warning("Train the agent on a file first — I need to learn your data before predicting.")
+    df = st.session_state.df_raw
+    if df is None:
+        st.warning("Upload and train on a file first.")
         return
 
+    result   = st.session_state.train_result or {}
+    target   = st.session_state.target_col
     classes  = result.get("class_names", [])
     features = result.get("feature_names", [])
-    target   = st.session_state.target_col or "outcome"
 
-    st.markdown(
-        f"Your data has **{len(classes)}** possible outcomes for `{target}`. "
-        "Pick one to understand what drives it, or set your own values for a custom prediction."
-    )
+    # ---- detect prediction options from the actual columns ----
+    date_cols     = _detect_date_cols(df)
+    numeric_cols  = df.select_dtypes(include=[np.number]).columns.tolist()
+    num_excl_tgt  = [c for c in numeric_cols if c != target]
 
-    options = [f"{i + 1}. {c}" for i, c in enumerate(classes)] + [
-        f"{len(classes) + 1}. Custom — set my own values"
-    ]
-    choice = st.radio("Choose an option:", options, key="predict_choice_radio")
-    chosen_idx = int(choice.split(".", 1)[0]) - 1
-    is_custom  = chosen_idx >= len(classes)
+    options: list[dict] = []
+
+    # Time-series forecasts (only if there's at least one date col)
+    if date_cols:
+        for col in num_excl_tgt[:3]:
+            options.append({
+                "kind":    "forecast",
+                "icon":    "📊",
+                "label":   f"Forecast **{col}** trends over time (time-series prediction)",
+                "value":   col,
+                "date":    date_cols[0],
+            })
+
+    # Classification using existing trained target
+    if target and classes:
+        options.append({
+            "kind":   "classify",
+            "icon":   "🏷️",
+            "label":  f"Classify new records into **{target}** ({', '.join(classes)})",
+        })
+
+    # Regression for each numeric column
+    for col in num_excl_tgt[:3]:
+        options.append({
+            "kind":   "regress",
+            "icon":   "📈",
+            "label":  f"Predict **{col}** based on other features",
+            "value":  col,
+        })
+
+    # Custom always last
+    options.append({
+        "kind":   "custom",
+        "icon":   "📝",
+        "label":  "Custom prediction — set your own values for the trained target",
+    })
+
+    # ---- header: numbered list of options + available columns ----
+    st.markdown("**Based on your loaded dataset, here are the predictions I can make:**")
+    listing_lines = [f"{i + 1}. {opt['icon']} {opt['label']}" for i, opt in enumerate(options)]
+    st.markdown("\n".join(listing_lines))
+
+    cols_shown = ", ".join(f"`{c}`" for c in df.columns[:14])
+    extra      = f"  *(+{len(df.columns) - 14} more)*" if len(df.columns) > 14 else ""
+    st.markdown(f"\n**Available columns:** {cols_shown}{extra}")
 
     st.divider()
 
-    # ----- PATH A: pick an existing class -> abduction ---------------------
-    if not is_custom:
-        chosen_class = classes[chosen_idx]
-        st.markdown(
-            f"**Selected outcome:** `{chosen_class}` — "
-            "I'll show what features in your data most strongly lead to this."
-        )
+    # ---- selection radio (numbered, with markdown bold stripped) ----
+    _bold_re = re.compile(r"\*\*(.+?)\*\*")
+    radio_labels = []
+    for i, opt in enumerate(options):
+        plain = _bold_re.sub(r"\1", opt["label"])
+        radio_labels.append(f"{i + 1}. {opt['icon']} {plain}")
+    chosen_label = st.radio("Pick an option:", radio_labels, key="predict_main_choice")
+    chosen_idx   = int(chosen_label.split(".", 1)[0]) - 1
+    chosen       = options[chosen_idx]
 
-        if st.button(
-            f"Run prediction analysis for '{chosen_class}'",
-            type="primary",
-            use_container_width=True,
-        ):
-            try:
-                imp_result = reasoner.abduce(chosen_class, top_k=5)
-                lines = [
-                    f"**Best explanation for outcome `{chosen_class}`:**",
-                    "",
-                ]
-                for c in imp_result["causes"]:
-                    lines.append(
-                        f"- **{c['feature']}** — importance {c['importance']:.4f}. {c['direction_hint']}."
-                    )
-                # Add Bayesian hints if available
-                bayes = None
-                if st.session_state.df_clean is not None:
-                    bayes = try_bayesian_abduce(
-                        st.session_state.df_clean, chosen_class, target, top_k=3
-                    )
-                if bayes:
-                    lines.extend(["", "Bayesian posterior hints:"])
-                    for b in bayes:
-                        lines.append(
-                            f"- **{b['feature']}** around {b['feature_value_range']} — "
-                            f"score {b['posterior_score']:.4f}"
-                        )
-
-                ml_answer = "\n".join(lines)
-                user_msg  = f"Predict outcome: {chosen_class}"
-                _emit_chat_pair(user_msg, ml_answer)
-                st.rerun()
-            except Exception as exc:
-                st.error(f"Prediction analysis failed: {exc}")
-
-    # ----- PATH B: custom -> deduction with user-provided feature values ---
-    else:
-        st.markdown("**Enter values for the features you know.** Leave blank to skip.")
-        # Show top 6 features only — too many fields overwhelms non-tech users
-        top_features = features[:6]
-        if not top_features:
-            st.warning("No features available to predict with.")
-            return
-
-        with st.form("custom_predict_form"):
-            cols  = st.columns(2)
-            facts: dict[str, str] = {}
-            for i, feat in enumerate(top_features):
-                with cols[i % 2]:
-                    val = st.text_input(feat, value="", key=f"feat_input_{i}")
-                    if val.strip():
-                        facts[feat] = val.strip()
-            submitted = st.form_submit_button(
-                "Predict outcome", type="primary", use_container_width=True
+    # ---- conditional sub-UI for the chosen option ----
+    if chosen["kind"] == "forecast":
+        periods = st.slider("How many months to forecast?", 3, 24, 6, key="fc_periods")
+        if st.button(f"Run forecast for {chosen['value']}", type="primary", use_container_width=True):
+            ml = _run_forecast(df, chosen["value"], chosen["date"], periods)
+            _emit_chat_pair(
+                f"Forecast {chosen['value']} for the next {periods} months", ml
             )
+            st.rerun()
 
-        if submitted:
-            if not facts:
-                st.warning("Set at least one feature value.")
-                return
-            # Cast to numbers where possible
-            parsed: dict[str, Any] = {}
-            for k, v in facts.items():
-                try:
-                    parsed[k] = float(v)
-                except ValueError:
-                    parsed[k] = v
-
-            try:
-                results = reasoner.deduce(parsed, top_k=3)
-                if not results:
-                    st.error("No rule matched those values. Try fewer or different values.")
-                    return
-                top = results[0]
-                facts_str = ", ".join(f"`{k}={v}`" for k, v in parsed.items())
-                ml_answer = (
-                    f"**Prediction for `{target}`: `{top['prediction']}`** "
-                    f"({top['confidence']:.0%} rule confidence · {top['match_score']:.0%} fact match)\n\n"
-                    f"Based on your inputs: {facts_str}\n\n"
-                    "**Supporting rule conditions:**\n"
-                    + "\n".join(f"- {cond}" for cond in top["conditions"][:8])
+    elif chosen["kind"] == "classify":
+        sub_opts = [f"Show drivers for class `{c}`" for c in classes] + ["Custom — set my own feature values"]
+        sub      = st.radio("How do you want to classify?", sub_opts, key="classify_sub_choice")
+        if "Custom" in sub:
+            st.markdown("**Enter values for the features you know.** Leave blank to skip.")
+            top_features = features[:6]
+            with st.form("classify_custom_form"):
+                cs  = st.columns(2)
+                facts: dict[str, str] = {}
+                for i, feat in enumerate(top_features):
+                    with cs[i % 2]:
+                        v = st.text_input(feat, value="", key=f"cls_feat_{i}")
+                        if v.strip():
+                            facts[feat] = v.strip()
+                submitted = st.form_submit_button(
+                    "Predict outcome", type="primary", use_container_width=True
                 )
-                user_msg = f"Predict using: {', '.join(f'{k}={v}' for k, v in parsed.items())}"
-                _emit_chat_pair(user_msg, ml_answer)
+            if submitted:
+                if not facts:
+                    st.warning("Set at least one feature value.")
+                    return
+                parsed: dict[str, Any] = {}
+                for k, v in facts.items():
+                    try:
+                        parsed[k] = float(v)
+                    except ValueError:
+                        parsed[k] = v
+                ml = _run_custom_classification(parsed, target)
+                user_msg = "Predict using: " + ", ".join(f"{k}={v}" for k, v in parsed.items())
+                _emit_chat_pair(user_msg, ml)
                 st.rerun()
-            except Exception as exc:
-                st.error(f"Prediction failed: {exc}")
+        else:
+            cls = sub.split("`")[1]
+            if st.button(f"Analyze drivers for '{cls}'", type="primary", use_container_width=True):
+                ml = _run_classification_for_class(cls, target)
+                _emit_chat_pair(f"What leads to outcome '{cls}'?", ml)
+                st.rerun()
+
+    elif chosen["kind"] == "regress":
+        target_num = chosen["value"]
+        st.markdown(
+            f"Predicting **`{target_num}`** — leave fields blank to use median defaults."
+        )
+        # Top 6 numeric features other than the regression target
+        rf_features = [c for c in df.select_dtypes(include=[np.number]).columns if c != target_num][:6]
+        with st.form("regress_form"):
+            cs   = st.columns(2)
+            ufax: dict[str, str] = {}
+            for i, feat in enumerate(rf_features):
+                with cs[i % 2]:
+                    med = df[feat].median()
+                    v   = st.text_input(feat, value="", placeholder=f"median: {med:.2f}", key=f"reg_feat_{i}")
+                    if v.strip():
+                        ufax[feat] = v.strip()
+            submitted = st.form_submit_button(
+                f"Predict {target_num}", type="primary", use_container_width=True
+            )
+        if submitted:
+            ml = _run_regression(df, target_num, ufax)
+            facts_str = ", ".join(f"{k}={v}" for k, v in ufax.items()) or "median defaults"
+            _emit_chat_pair(f"Predict {target_num} given {facts_str}", ml)
+            st.rerun()
+
+    else:  # custom — free text prediction request handled by AI
+        free_text = st.text_area(
+            "Describe what you want to predict:",
+            placeholder="e.g. \"Forecast monthly net_sales for the next 3 months\"",
+            key="custom_predict_text",
+        )
+        if st.button("Run custom prediction", type="primary", use_container_width=True):
+            if not free_text.strip():
+                st.warning("Type a prediction request first.")
+                return
+            ml = (
+                "I'll treat this as a free-form prediction request. "
+                "The AI will interpret your request against the actual data."
+            )
+            _emit_chat_pair(free_text.strip(), ml)
+            st.rerun()
 
 
 init_state()
