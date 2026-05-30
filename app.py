@@ -1205,6 +1205,157 @@ def visualize_dialog() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Prediction dialog — ML model picks/uses real classes; AI explains in plain English
+# ---------------------------------------------------------------------------
+
+def _emit_chat_pair(user_msg: str, ml_answer: str) -> None:
+    """
+    Append user message + assistant response (ML answer + labeled AI Explanation)
+    to the chat. Used by the predict dialog so a button-driven prediction
+    looks identical to a typed prediction.
+    """
+    st.session_state.chat.append({"role": "user", "content": user_msg})
+    groq_explanation = call_external_ai(user_msg, ml_answer)
+    if groq_explanation:
+        final = (
+            f"{ml_answer}\n\n"
+            f"{_AI_EXPLANATION_LABEL}\n"
+            f"{groq_explanation}"
+        )
+    else:
+        final = ml_answer
+    st.session_state.chat.append({"role": "assistant", "content": final})
+
+
+@st.dialog("Make a prediction", width="large")
+def predict_dialog() -> None:
+    """
+    Lists all possible target classes the ML model knows about, plus a
+    'Custom' option that lets the user set feature values. The ML model
+    (RandomForest / DecisionTree rules) computes the result; AI explains it.
+    """
+    result = st.session_state.train_result
+    if not result:
+        st.warning("Train the agent on a file first — I need to learn your data before predicting.")
+        return
+
+    classes  = result.get("class_names", [])
+    features = result.get("feature_names", [])
+    target   = st.session_state.target_col or "outcome"
+
+    st.markdown(
+        f"Your data has **{len(classes)}** possible outcomes for `{target}`. "
+        "Pick one to understand what drives it, or set your own values for a custom prediction."
+    )
+
+    options = [f"{i + 1}. {c}" for i, c in enumerate(classes)] + [
+        f"{len(classes) + 1}. Custom — set my own values"
+    ]
+    choice = st.radio("Choose an option:", options, key="predict_choice_radio")
+    chosen_idx = int(choice.split(".", 1)[0]) - 1
+    is_custom  = chosen_idx >= len(classes)
+
+    st.divider()
+
+    # ----- PATH A: pick an existing class -> abduction ---------------------
+    if not is_custom:
+        chosen_class = classes[chosen_idx]
+        st.markdown(
+            f"**Selected outcome:** `{chosen_class}` — "
+            "I'll show what features in your data most strongly lead to this."
+        )
+
+        if st.button(
+            f"Run prediction analysis for '{chosen_class}'",
+            type="primary",
+            use_container_width=True,
+        ):
+            try:
+                imp_result = reasoner.abduce(chosen_class, top_k=5)
+                lines = [
+                    f"**Best explanation for outcome `{chosen_class}`:**",
+                    "",
+                ]
+                for c in imp_result["causes"]:
+                    lines.append(
+                        f"- **{c['feature']}** — importance {c['importance']:.4f}. {c['direction_hint']}."
+                    )
+                # Add Bayesian hints if available
+                bayes = None
+                if st.session_state.df_clean is not None:
+                    bayes = try_bayesian_abduce(
+                        st.session_state.df_clean, chosen_class, target, top_k=3
+                    )
+                if bayes:
+                    lines.extend(["", "Bayesian posterior hints:"])
+                    for b in bayes:
+                        lines.append(
+                            f"- **{b['feature']}** around {b['feature_value_range']} — "
+                            f"score {b['posterior_score']:.4f}"
+                        )
+
+                ml_answer = "\n".join(lines)
+                user_msg  = f"Predict outcome: {chosen_class}"
+                _emit_chat_pair(user_msg, ml_answer)
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Prediction analysis failed: {exc}")
+
+    # ----- PATH B: custom -> deduction with user-provided feature values ---
+    else:
+        st.markdown("**Enter values for the features you know.** Leave blank to skip.")
+        # Show top 6 features only — too many fields overwhelms non-tech users
+        top_features = features[:6]
+        if not top_features:
+            st.warning("No features available to predict with.")
+            return
+
+        with st.form("custom_predict_form"):
+            cols  = st.columns(2)
+            facts: dict[str, str] = {}
+            for i, feat in enumerate(top_features):
+                with cols[i % 2]:
+                    val = st.text_input(feat, value="", key=f"feat_input_{i}")
+                    if val.strip():
+                        facts[feat] = val.strip()
+            submitted = st.form_submit_button(
+                "Predict outcome", type="primary", use_container_width=True
+            )
+
+        if submitted:
+            if not facts:
+                st.warning("Set at least one feature value.")
+                return
+            # Cast to numbers where possible
+            parsed: dict[str, Any] = {}
+            for k, v in facts.items():
+                try:
+                    parsed[k] = float(v)
+                except ValueError:
+                    parsed[k] = v
+
+            try:
+                results = reasoner.deduce(parsed, top_k=3)
+                if not results:
+                    st.error("No rule matched those values. Try fewer or different values.")
+                    return
+                top = results[0]
+                facts_str = ", ".join(f"`{k}={v}`" for k, v in parsed.items())
+                ml_answer = (
+                    f"**Prediction for `{target}`: `{top['prediction']}`** "
+                    f"({top['confidence']:.0%} rule confidence · {top['match_score']:.0%} fact match)\n\n"
+                    f"Based on your inputs: {facts_str}\n\n"
+                    "**Supporting rule conditions:**\n"
+                    + "\n".join(f"- {cond}" for cond in top["conditions"][:8])
+                )
+                user_msg = f"Predict using: {', '.join(f'{k}={v}' for k, v in parsed.items())}"
+                _emit_chat_pair(user_msg, ml_answer)
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Prediction failed: {exc}")
+
+
 init_state()
 
 
@@ -1572,7 +1723,6 @@ with workspace_col:
         "Top drivers":    "What are the top drivers?",
         "Missing values": "Show missing values",
         "Why high?":      "Why is the high outcome happening?",
-        "Predict":        "Predict if quantity=5 and discount_pct=10",
     }
     pin_cols = st.columns(len(pin_prompts))
     for idx, label in enumerate(pin_prompts):
@@ -1580,6 +1730,8 @@ with workspace_col:
             if st.button(label, key=f"pin_{idx}", use_container_width=True):
                 if label == "Visualize":
                     visualize_dialog()
+                elif label == "Predict":
+                    predict_dialog()
                 else:
                     pinned_prompt = pin_map[label]
                     st.session_state.chat.append({"role": "user", "content": pinned_prompt})
