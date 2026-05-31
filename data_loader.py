@@ -244,18 +244,27 @@ def clean_data(df: pd.DataFrame, target_col: str = "sales_category") -> pd.DataF
         df[col + "_dow"] = df[col].dt.dayofweek
         df = df.drop(columns=[col])
 
+    # Cast bool columns to int — numpy.quantile and many sklearn ops refuse booleans
+    for col in df.columns:
+        if df[col].dtype == bool:
+            df[col] = df[col].astype("int64")
+
     # Create target if absent
     if target_col not in df.columns:
         numeric_candidates = [c for c in ["net_sales", "sales", "revenue", "amount"] if c in df.columns]
         if numeric_candidates:
             sales_col = numeric_candidates[0]
-            low_q = df[sales_col].quantile(0.33)
-            high_q = df[sales_col].quantile(0.67)
-            df[target_col] = pd.cut(
-                df[sales_col],
-                bins=[-np.inf, low_q, high_q, np.inf],
-                labels=["low", "medium", "high"],
-            ).astype(str)
+            series   = df[sales_col].astype("float64")
+            low_q    = series.quantile(0.33)
+            high_q   = series.quantile(0.67)
+            if low_q == high_q:
+                df[target_col] = np.where(series >= series.median(), "high", "low")
+            else:
+                df[target_col] = pd.cut(
+                    series,
+                    bins=[-np.inf, low_q, high_q, np.inf],
+                    labels=["low", "medium", "high"],
+                ).astype(str)
 
     # Impute
     for col in df.select_dtypes(include="number").columns:

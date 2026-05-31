@@ -580,6 +580,24 @@ def detect_target(df: pd.DataFrame, requested: str | None) -> str:
     return "analyst_cluster"
 
 
+def _to_safe_numeric(series: pd.Series) -> pd.Series:
+    """
+    Coerce a series to a safe numeric form before quantile / arithmetic.
+    Booleans are cast to int (numpy.quantile refuses to subtract bools).
+    Object / non-numeric values become NaN-safe floats.
+    """
+    if series.dtype == bool:
+        return series.astype("int64")
+    if pd.api.types.is_numeric_dtype(series):
+        return series.astype("float64")
+    return pd.to_numeric(series, errors="coerce")
+
+
+def _is_usable_numeric(s: pd.Series) -> bool:
+    """True only for numeric columns that aren't pure booleans (which break quantile)."""
+    return pd.api.types.is_numeric_dtype(s) and s.dtype != bool
+
+
 def ensure_target(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
     working = df.copy()
     if target_col in working.columns and working[target_col].nunique(dropna=True) >= 2:
@@ -587,18 +605,28 @@ def ensure_target(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
 
     base_name = target_col.replace("_tier", "")
     if base_name in working.columns and pd.api.types.is_numeric_dtype(working[base_name]):
-        series = working[base_name].fillna(working[base_name].median())
+        series = _to_safe_numeric(working[base_name])
+        series = series.fillna(series.median())
     else:
-        numeric_cols = [c for c in working.columns if pd.api.types.is_numeric_dtype(working[c])]
+        # Prefer real numeric columns; fall back to bool→int if that's all we have
+        numeric_cols = [c for c in working.columns if _is_usable_numeric(working[c])]
+        if not numeric_cols:
+            numeric_cols = [c for c in working.columns if pd.api.types.is_numeric_dtype(working[c])]
         if numeric_cols:
             base_name = numeric_cols[0]
-            series = working[base_name].fillna(working[base_name].median())
+            series = _to_safe_numeric(working[base_name])
+            series = series.fillna(series.median())
         else:
             working["text_signal"] = working.astype(str).agg(" ".join, axis=1).str.len()
             base_name = "text_signal"
-            series = working[base_name]
+            series = working[base_name].astype("float64")
 
-    low_q = series.quantile(0.33)
+    # Edge case: not enough unique values for quantile-based binning
+    if series.nunique(dropna=True) < 3:
+        working[target_col] = np.where(series >= series.median(), "high", "low")
+        return working
+
+    low_q  = series.quantile(0.33)
     high_q = series.quantile(0.67)
     if low_q == high_q:
         working[target_col] = np.where(series >= series.median(), "high", "low")
