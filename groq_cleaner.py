@@ -545,6 +545,9 @@ def clean_dataframe(
         n_rows, len(sample.columns), len(sample),
     )
 
+    # ---- Capture original missing counts BEFORE any imputation -----------
+    original_missing = {c: int(v) for c, v in df.isna().sum().items() if v > 0}
+
     # ---- ONE Groq call ----
     rules = get_rules(sample, meta, n_rows, api_key=api_key, model=model)
 
@@ -557,6 +560,7 @@ def clean_dataframe(
     t_apply  = time.perf_counter()
     clean_df = _apply_to_chunk(df.copy(), drop_cols, rename_map, cast_map, impute_map)
     schema   = _build_schema(clean_df, rules)
+    schema["original_missing"] = original_missing   # what the user actually had
 
     logger.info(
         "[groq_cleaner] clean_dataframe done: %d rows × %d cols in %.3fs total",
@@ -603,8 +607,16 @@ def clean_large_file(
     t_pipeline = time.perf_counter()
     logger.info("[groq_cleaner] clean_large_file: %s", Path(path).name)
 
-    # Step 1 — profile (chunked, memory-flat)
+    # Step 1 — profile (chunked, memory-flat). Sample shows original missing rate.
     sample, meta, n_rows = build_profile(path)
+    # Estimate original missing counts by scaling sample's missing rate to full size
+    sample_missing = sample.isna().sum()
+    scale = (n_rows / max(len(sample), 1)) if len(sample) else 1
+    original_missing = {
+        c: int(round(int(sample_missing[c]) * scale))
+        for c in sample.columns
+        if sample_missing[c] > 0
+    }
 
     # Step 2 — ONE Groq call (fixed-size payload, O(1) latency)
     rules = get_rules(sample, meta, n_rows, api_key=api_key, model=model)
@@ -614,6 +626,7 @@ def clean_large_file(
 
     # Step 4 — build schema for EDA / downstream stages
     schema = _build_schema(clean_df, rules)
+    schema["original_missing"] = original_missing
 
     total = time.perf_counter() - t_pipeline
     logger.info(

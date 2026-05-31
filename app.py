@@ -488,7 +488,8 @@ def init_state() -> None:
         "source_filename": None,
         "source_sheet_count": 1,
         "trained_at":      None,
-        "recent_files":    [],     # list of dicts: {name, size_kb, ext, trained}
+        "recent_files":    [],
+        "original_missing": {},    # missing-value counts from BEFORE cleaning
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -706,12 +707,20 @@ def compact_table(items: dict[str, Any], limit: int = 8) -> str:
 
 
 
+def _truncate(value: Any, limit: int = 40) -> str:
+    """Shorten any cell value so the LLM context stays within token bounds."""
+    s = str(value)
+    return (s[:limit] + "…") if len(s) > limit else s
+
+
 def dataset_context_for_llm(prompt: str) -> str:
     """
-    Build a rich, data-grounded context string for Groq so it can answer
-    ANY question about the uploaded dataset — not just keyword-matched ones.
-    Includes actual row samples, per-column breakdowns, real percentages,
-    and feature importance rankings.
+    Build a bounded, data-grounded context string for Groq.
+    Caps applied to prevent token overflow on wide / text-heavy datasets:
+      - Per-column descriptions limited to top 25 columns
+      - Top-value lists capped at 5 values, each truncated to 40 chars
+      - Sample rows scaled inversely with column count (5–20 rows)
+      - Each sample cell truncated to 30 chars
     """
     df     = st.session_state.df_raw
     result = st.session_state.train_result or {}
@@ -720,38 +729,51 @@ def dataset_context_for_llm(prompt: str) -> str:
     if df is None:
         return "No dataset loaded yet."
 
+    MAX_COLS_DESC   = 25
+    MAX_TOP_VALUES  = 5
+    MAX_VALUE_CHARS = 40
+    MAX_CELL_CHARS  = 30
+
     lines: list[str] = []
 
     # File identity
     fname = st.session_state.get("source_filename") or "uploaded file"
     lines.append(f"File: {fname}")
     lines.append(f"Size: {len(df):,} rows × {len(df.columns)} columns")
-    lines.append(f"All columns: {list(df.columns)}")
+    cols_list = list(df.columns)
+    lines.append(f"All columns: {cols_list[:50]}{'...' if len(cols_list) > 50 else ''}")
 
-    # Per-column breakdown with real counts and percentages
+    # Per-column breakdown (capped)
     lines.append("\nColumn details:")
-    for col in df.columns:
-        if pd.api.types.is_numeric_dtype(df[col]):
-            s = df[col].describe()
-            lines.append(
-                f"  '{col}' (numeric) — "
-                f"min={s['min']:.2f}, max={s['max']:.2f}, "
-                f"avg={s['mean']:.2f}, {df[col].nunique()} unique values"
-            )
-        else:
-            vc  = df[col].value_counts()
-            pct = (vc / len(df) * 100).round(1)
-            top = {str(k): f"{v:,} rows ({pct[k]}%)" for k, v in vc.head(6).items()}
-            lines.append(f"  '{col}' (text/category) — {df[col].nunique()} unique, top values: {top}")
+    for col in df.columns[:MAX_COLS_DESC]:
+        try:
+            if pd.api.types.is_numeric_dtype(df[col]):
+                s = df[col].describe()
+                lines.append(
+                    f"  '{col}' (numeric) — min={s['min']:.2f}, max={s['max']:.2f}, "
+                    f"avg={s['mean']:.2f}, {df[col].nunique()} unique"
+                )
+            else:
+                vc  = df[col].value_counts()
+                pct = (vc / len(df) * 100).round(1)
+                top = {
+                    _truncate(k, MAX_VALUE_CHARS): f"{v:,} ({pct[k]}%)"
+                    for k, v in vc.head(MAX_TOP_VALUES).items()
+                }
+                lines.append(f"  '{col}' (text) — {df[col].nunique()} unique, top: {top}")
+        except Exception:
+            continue
+    if len(df.columns) > MAX_COLS_DESC:
+        lines.append(f"  …(+{len(df.columns) - MAX_COLS_DESC} more columns not shown)")
 
-    # Target distribution with percentages
+    # Target distribution
     if target and target in df.columns:
         vc  = df[target].value_counts()
         pct = (vc / len(df) * 100).round(1)
-        dist = {str(k): f"{v:,} ({pct[k]}%)" for k, v in vc.items()}
+        dist = {str(k): f"{v:,} ({pct[k]}%)" for k, v in vc.head(10).items()}
         lines.append(f"\nPrediction target '{target}': {dist}")
 
-    # Most impactful columns ranked (SHAP or permutation importance)
+    # Most impactful columns ranked
     if Path("feature_importances.pkl").exists():
         try:
             imp_data = trainer.load_importances()
@@ -770,14 +792,22 @@ def dataset_context_for_llm(prompt: str) -> str:
         if cv:
             lines.append(f"Cross-validation accuracy: {cv:.1%}")
 
-    # Missing values
-    missing = df.isna().sum()
-    missing_d = {c: int(v) for c, v in missing[missing > 0].items()}
-    lines.append(f"Missing values: {missing_d if missing_d else 'none'}")
+    # ORIGINAL missing values (captured before cleaning), then current
+    orig_miss = st.session_state.get("original_missing", {}) or {}
+    if orig_miss:
+        lines.append(f"Missing values in original file: {dict(list(orig_miss.items())[:10])}")
+    else:
+        cur_miss = df.isna().sum()
+        cur_d    = {c: int(v) for c, v in cur_miss[cur_miss > 0].items()}
+        lines.append(f"Missing values: {dict(list(cur_d.items())[:10]) if cur_d else 'none'}")
 
-    # Actual data sample so Groq can see real values
-    sample_n = min(20, len(df))
-    lines.append(f"\nSample data ({sample_n} rows):\n{df.head(sample_n).to_csv(index=False)}")
+    # Sample rows (scaled inversely with column count, each cell truncated)
+    col_count = max(len(df.columns), 1)
+    sample_n  = max(5, min(20, 600 // col_count))
+    sample_df = df.head(sample_n).copy()
+    for c in sample_df.columns:
+        sample_df[c] = sample_df[c].astype(str).str.slice(0, MAX_CELL_CHARS)
+    lines.append(f"\nSample data ({sample_n} rows):\n{sample_df.to_csv(index=False)}")
 
     return "\n".join(lines)
 
@@ -874,8 +904,12 @@ def call_external_ai(prompt: str, local_ml_answer: str) -> str | None:
             max_tokens=300,
         )
         raw = response.choices[0].message.content.strip()
+        st.session_state["_last_ai_error"] = None
         return _normalize_bullets(raw)
-    except Exception:
+    except Exception as exc:
+        # Surface the failure cause so the user / developer can see why
+        # the AI Explanation is missing (timeout, token limit, rate limit, etc.)
+        st.session_state["_last_ai_error"] = str(exc)[:140]
         return None
 
 
@@ -940,11 +974,32 @@ def answer_with_data(prompt: str) -> str:
         )
 
     if any(word in low_prompt for word in ["missing", "null", "clean", "quality"]):
+        # Prefer ORIGINAL missing counts (captured before auto-imputation) so the
+        # user sees what was actually in their file, not what's in memory after cleaning
+        original = st.session_state.get("original_missing", {}) or {}
+        current  = profile.get("missing", {}) or {}
+
+        if original:
+            total = sum(original.values())
+            return (
+                f"**Data quality scan — original file**\n\n"
+                f"Found **{total:,} missing values** across {len(original)} column(s) in your uploaded data:\n\n"
+                f"{compact_table(original, limit=10)}\n\n"
+                "These have been automatically filled during training "
+                "(median for numeric columns, most-common value for text columns) "
+                "so the model can learn from every row."
+            )
+        if current:
+            return (
+                "**Data quality scan**\n\n"
+                f"Missing values remaining after cleaning:\n\n"
+                f"{compact_table(current, limit=10)}\n\n"
+                "Recommended: impute numeric gaps with the median, fill categorical gaps with "
+                "the most common value or 'Unknown'."
+            )
         return (
-            "Data quality scan:\n\n"
-            f"{compact_table(profile.get('missing', {}), limit=10)}\n\n"
-            "Recommended next actions: impute numeric gaps with median values, fill categorical gaps "
-            "with the most common label or 'Unknown', and review high-cardinality ID columns before training."
+            "**Data quality scan: clean** ✓\n\n"
+            "No missing values detected in your dataset — every row is complete and ready to use."
         )
 
     if any(word in low_prompt for word in ["important", "importance", "driver", "drivers", "influence"]):
@@ -1047,12 +1102,18 @@ _AI_EXPLANATION_LABEL = (
     'letter-spacing:.10em;margin:10px 0 6px;">✦ AI Explanation</div>'
 )
 
+_AI_UNAVAILABLE = (
+    '<div style="display:inline-flex;align-items:center;gap:5px;'
+    'font-size:10px;color:#D86848;font-weight:700;text-transform:uppercase;'
+    'letter-spacing:.10em;margin:10px 0 4px;">⚠ AI Explanation Unavailable</div>'
+)
+
 def generate_response(prompt: str) -> str:
     """
     Produce a chat-bubble-ready response:
-      - structured ML queries: ML result + thin divider + 'AI Explanation' label + Groq
-      - open-ended: just sage 'AI Analysis' label + Groq's direct answer
-      - Groq unavailable: ML answer only
+      - structured ML queries: ML result + 'AI Explanation' label + Groq prose
+      - open-ended questions: sage 'AI Analysis' label + Groq direct answer
+      - if Groq fails: ML answer + small warning so the user sees why
     """
     ml_answer   = answer_with_data(prompt)
     groq_answer = call_external_ai(prompt, ml_answer)
@@ -1066,9 +1127,19 @@ def generate_response(prompt: str) -> str:
                 f"{_AI_EXPLANATION_LABEL}\n"
                 f"{groq_answer}"
             )
-        else:
-            return f"{_AI_LABEL}\n\n{groq_answer}"
+        return f"{_AI_LABEL}\n\n{groq_answer}"
 
+    # Groq failed — show ML answer + small note so user understands
+    err = st.session_state.get("_last_ai_error")
+    if err:
+        note = (
+            f"{ml_answer}\n\n"
+            f"{_AI_UNAVAILABLE}\n"
+            f"<span style='font-size:11px;color:#9A938A;'>"
+            f"AI explanation could not be generated this time ({err}). "
+            f"The ML model's answer is shown above.</span>"
+        )
+        return note
     return ml_answer
 
 
@@ -1877,19 +1948,20 @@ if train_clicked:
                 if _is_excel:
                     _sheet = selected_sheet if selected_sheet is not None else 0
                     _raw = read_excel_sheet(uploaded, _sheet)
-                    raw_df, _rules, _ = _gc.clean_dataframe(_raw, api_key=_GROQ_API_KEY)
+                    raw_df, _rules, _schema = _gc.clean_dataframe(_raw, api_key=_GROQ_API_KEY)
                 else:
                     _tmp_path = tempfile.mktemp(suffix=".csv")
                     try:
                         with open(_tmp_path, "wb") as _f:
                             _f.write(uploaded.getvalue())
-                        raw_df, _rules, _ = _gc.clean_large_file(
+                        raw_df, _rules, _schema = _gc.clean_large_file(
                             _tmp_path, api_key=_GROQ_API_KEY
                         )
                     finally:
                         Path(_tmp_path).unlink(missing_ok=True)
 
                 target_request = _rules.get("target") or target_request
+                st.session_state.original_missing = _schema.get("original_missing", {})
 
             elif source == "Local file path":
                 if not local_path.strip():
@@ -1909,16 +1981,18 @@ if train_clicked:
                 if _lp.suffix.lower() in (".xlsx", ".xls"):
                     _sheet = selected_sheet if selected_sheet is not None else 0
                     _raw = read_excel_sheet(_lp, _sheet)
-                    raw_df, _rules, _ = _gc.clean_dataframe(_raw, api_key=_GROQ_API_KEY)
+                    raw_df, _rules, _schema = _gc.clean_dataframe(_raw, api_key=_GROQ_API_KEY)
                 else:
-                    raw_df, _rules, _ = _gc.clean_large_file(
+                    raw_df, _rules, _schema = _gc.clean_large_file(
                         str(_lp), api_key=_GROQ_API_KEY
                     )
                 target_request = _rules.get("target") or target_request
+                st.session_state.original_missing = _schema.get("original_missing", {})
 
             else:  # Generate demo data
                 st.session_state.source_filename = "synthetic_sales_data.csv"
                 raw_df = dl.generate_synthetic_data(n_rows=rows)
+                st.session_state.original_missing = {}   # demo data has none
 
             train_agent(raw_df, target_request, tree_depth, n_estimators)
 
