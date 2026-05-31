@@ -128,26 +128,50 @@ def build_profile(
         n_rows = 0
         reservoir: list[pd.DataFrame] = []
 
-        def _open_reader(enc: str = "utf-8"):
-            return pd.read_csv(path, chunksize=CHUNK_SIZE, low_memory=False, encoding=enc)
+        def _open_reader(enc: str = "utf-8", _python: bool = False):
+            # Fast C engine first; python engine (slower) only when delimiter
+            # auto-detection or quote handling is needed
+            if _python:
+                return pd.read_csv(
+                    path, chunksize=CHUNK_SIZE, encoding=enc,
+                    sep=None, engine="python", on_bad_lines="skip",
+                )
+            return pd.read_csv(
+                path, chunksize=CHUNK_SIZE, low_memory=False, encoding=enc,
+                on_bad_lines="skip",
+            )
 
-        try:
-            reader = _open_reader("utf-8")
-            for chunk in reader:
-                if head is None:
-                    head   = chunk.head(HEAD_N)
-                    dtypes = chunk.dtypes.astype(str).to_dict()
-                n_rows += len(chunk)
-                reservoir.append(chunk.sample(min(40, len(chunk)), random_state=42))
-        except UnicodeDecodeError:
-            logger.info("[groq_cleaner] UTF-8 failed, retrying with latin-1")
-            head, dtypes, n_rows, reservoir = None, {}, 0, []
-            for chunk in _open_reader("latin-1"):
-                if head is None:
-                    head   = chunk.head(HEAD_N)
-                    dtypes = chunk.dtypes.astype(str).to_dict()
-                n_rows += len(chunk)
-                reservoir.append(chunk.sample(min(40, len(chunk)), random_state=42))
+        # Try encodings in order: utf-8 (most common), utf-8-sig (BOM),
+        # utf-16, cp1252 (Windows), latin-1 (always succeeds, last resort)
+        _encodings = ["utf-8", "utf-8-sig", "utf-16", "cp1252", "latin-1"]
+        _last_err: Exception | None = None
+        _ok = False
+        for _enc in _encodings:
+            # Try fast C engine first, fall back to python engine on parse error
+            for _use_python in (False, True):
+                try:
+                    head, dtypes, n_rows, reservoir = None, {}, 0, []
+                    for chunk in _open_reader(_enc, _use_python):
+                        if head is None:
+                            head   = chunk.head(HEAD_N)
+                            dtypes = chunk.dtypes.astype(str).to_dict()
+                        n_rows += len(chunk)
+                        reservoir.append(chunk.sample(min(40, len(chunk)), random_state=42))
+                    if _enc != "utf-8" or _use_python:
+                        logger.info("[groq_cleaner] Read succeeded with encoding=%s engine=%s",
+                                    _enc, "python" if _use_python else "c")
+                    _ok = True
+                    break
+                except (UnicodeDecodeError, UnicodeError) as exc:
+                    _last_err = exc
+                    break   # encoding wrong, try next encoding
+                except (pd.errors.ParserError, ValueError) as exc:
+                    _last_err = exc
+                    continue   # parse error, try python engine with same encoding
+            if _ok:
+                break
+        if not _ok:
+            raise RuntimeError(f"Could not decode file with any tried encoding: {_last_err}")
 
         raw_sample   = pd.concat([head, *reservoir]).reset_index(drop=True)
         # Stratified top-up: ensure rare classes appear in the sample.
@@ -374,16 +398,35 @@ def apply_rules(
         chunk = pd.read_excel(path, engine="openpyxl")
         out.append(_apply_to_chunk(chunk, drop_cols, rename_map, cast_map, impute_map))
     else:
-        def _open(enc: str = "utf-8"):
-            return pd.read_csv(path, chunksize=CHUNK_SIZE, low_memory=False, encoding=enc)
+        def _open(enc: str = "utf-8", _python: bool = False):
+            if _python:
+                return pd.read_csv(
+                    path, chunksize=CHUNK_SIZE, encoding=enc,
+                    sep=None, engine="python", on_bad_lines="skip",
+                )
+            return pd.read_csv(
+                path, chunksize=CHUNK_SIZE, low_memory=False, encoding=enc,
+                on_bad_lines="skip",
+            )
 
-        try:
-            for chunk in _open("utf-8"):
-                out.append(_apply_to_chunk(chunk, drop_cols, rename_map, cast_map, impute_map))
-        except UnicodeDecodeError:
-            out.clear()
-            for chunk in _open("latin-1"):
-                out.append(_apply_to_chunk(chunk, drop_cols, rename_map, cast_map, impute_map))
+        _encodings = ["utf-8", "utf-8-sig", "utf-16", "cp1252", "latin-1"]
+        _ok = False
+        for _enc in _encodings:
+            for _use_python in (False, True):
+                try:
+                    out.clear()
+                    for chunk in _open(_enc, _use_python):
+                        out.append(_apply_to_chunk(chunk, drop_cols, rename_map, cast_map, impute_map))
+                    _ok = True
+                    break
+                except (UnicodeDecodeError, UnicodeError):
+                    break
+                except (pd.errors.ParserError, ValueError):
+                    continue
+            if _ok:
+                break
+        if not _ok:
+            raise RuntimeError("Could not decode file with any tried encoding")
 
     clean_df = pd.concat(out, ignore_index=True)
     elapsed  = time.perf_counter() - t0

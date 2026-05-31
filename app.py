@@ -1073,20 +1073,71 @@ def generate_response(prompt: str) -> str:
 
 
 def train_agent(df: pd.DataFrame, target_request: str, tree_depth: int, n_estimators: int) -> None:
-    # Strip Excel artifact columns before anything else
+    # ----- PRE-CLEAN GUARDS ---------------------------------------------
+    # Strip whitespace from column names
+    df.columns = [str(c).strip() for c in df.columns]
+
+    # Drop Excel artifact columns
     unnamed = [c for c in df.columns if str(c).startswith("Unnamed:")]
     if unnamed:
         df = df.drop(columns=unnamed)
 
-    if df.empty or len(df.columns) == 0:
-        raise ValueError("The uploaded file has no usable columns after removing unnamed/empty columns.")
+    # De-duplicate column names
+    if df.columns.duplicated().any():
+        seen: dict[str, int] = {}
+        new_cols: list[str] = []
+        for c in df.columns:
+            if c in seen:
+                seen[c] += 1
+                new_cols.append(f"{c}_{seen[c]}")
+            else:
+                seen[c] = 0
+                new_cols.append(c)
+        df.columns = new_cols
 
+    # Drop completely empty rows / columns
+    df = df.dropna(axis=0, how="all")
+    df = df.dropna(axis=1, how="all")
+
+    if df.empty:
+        raise ValueError("The uploaded file is empty after removing blank rows.")
+    if len(df.columns) == 0:
+        raise ValueError("The uploaded file has no usable columns after removing empty/unnamed columns.")
+    if len(df.columns) < 2:
+        raise ValueError(
+            f"Need at least 2 columns to train (1 feature + 1 target). Got {len(df.columns)}."
+        )
+    if len(df) < 10:
+        raise ValueError(
+            f"Need at least 10 rows of data to train reliably. Got {len(df)} rows."
+        )
+
+    # ----- TARGET DETECTION + CLEANING -----------------------------------
     target_col = detect_target(df, target_request.strip() or None)
-    model_df = ensure_target(df, target_col)
-    clean_df = dl.clean_data(model_df, target_col=target_col)
+    model_df   = ensure_target(df, target_col)
+    clean_df   = dl.clean_data(model_df, target_col=target_col)
 
+    # ----- POST-CLEAN VALIDATION -----------------------------------------
+    if clean_df.empty:
+        raise ValueError(
+            "After cleaning, no rows remain. The dataset may have too many missing values."
+        )
+    if target_col not in clean_df.columns:
+        raise ValueError(
+            f"Target column '{target_col}' was removed during cleaning. "
+            "Try specifying a different target column."
+        )
+    feature_count = len([c for c in clean_df.columns if c != target_col])
+    if feature_count < 1:
+        raise ValueError(
+            "After cleaning, no feature columns remain — every column was either constant, "
+            "all-missing, or an ID. The dataset has nothing to learn from."
+        )
     if clean_df[target_col].nunique(dropna=True) < 2:
-        raise ValueError("The target has fewer than two classes after cleaning.")
+        raise ValueError(
+            f"The target column '{target_col}' has only one unique value after cleaning. "
+            "A classification model needs at least 2 distinct classes to learn from."
+        )
 
     result = trainer.train(
         clean_df,

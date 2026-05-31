@@ -211,18 +211,89 @@ def clean_data(df: pd.DataFrame, target_col: str = "sales_category") -> pd.DataF
     """
     df = df.copy()
 
-    # Drop Excel artifact columns (e.g. "Unnamed: 0", "Unnamed: 1")
+    # --- COLUMN-NAME HYGIENE ---------------------------------------
+    # 1. Strip whitespace from column names
+    df.columns = [str(c).strip() for c in df.columns]
+
+    # 2. Drop Excel artifact columns ("Unnamed: 0", "Unnamed: 1")
     unnamed = [c for c in df.columns if str(c).startswith("Unnamed:")]
     if unnamed:
         df = df.drop(columns=unnamed)
 
-    # Drop near-empty columns
-    threshold = 0.6 * len(df)
+    # 3. De-duplicate column names (Excel multi-row headers often produce dupes)
+    if df.columns.duplicated().any():
+        seen: dict[str, int] = {}
+        new_cols = []
+        for c in df.columns:
+            if c in seen:
+                seen[c] += 1
+                new_cols.append(f"{c}_{seen[c]}")
+            else:
+                seen[c] = 0
+                new_cols.append(c)
+        df.columns = new_cols
+
+    # --- ROW & CELL HYGIENE ----------------------------------------
+    # 4. Drop completely empty rows
+    df = df.dropna(axis=0, how="all")
+    # 5. Drop completely empty columns
+    df = df.dropna(axis=1, how="all")
+
+    # 6. Normalize common "missing" markers to real NaN
+    NA_STRINGS = {
+        "", " ", "NA", "N/A", "n/a", "na", "null", "NULL", "Null",
+        "None", "none", "NONE", "-", "--", "—", "?", "??",
+        "#N/A", "#NA", "#DIV/0!", "#VALUE!", "#NAME?", "#REF!", "#NULL!",
+        "nan", "NaN", "NAN", ".", "..",
+    }
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = df[col].astype(str).str.strip()
+        df[col] = df[col].replace(list(NA_STRINGS), np.nan)
+
+    # 7. Coerce string-numeric columns ("$1,200.50", "25%", "10 kg", "25 years")
+    _strip_pattern = r"[\$£€¥₹,\s%]"
+    _alpha_pattern = r"[A-Za-z]+"
+    for col in df.select_dtypes(include="object").columns:
+        if col == target_col:
+            continue
+        sample = df[col].dropna().astype(str)
+        if len(sample) < 5:
+            continue
+        cleaned_sample = (
+            sample.str.replace(_strip_pattern, "", regex=True)
+                  .str.replace(_alpha_pattern, "", regex=True)
+                  .str.strip()
+        )
+        attempt = pd.to_numeric(cleaned_sample, errors="coerce")
+        # If 80%+ of non-null values look numeric, convert the whole column
+        if attempt.notna().sum() / max(len(sample), 1) > 0.8:
+            full = (
+                df[col].astype(str)
+                       .str.replace(_strip_pattern, "", regex=True)
+                       .str.replace(_alpha_pattern, "", regex=True)
+                       .str.strip()
+            )
+            df[col] = pd.to_numeric(full, errors="coerce")
+
+    # Cast bool columns to int — numpy.quantile and many sklearn ops refuse booleans
+    for col in df.columns:
+        if df[col].dtype == bool:
+            df[col] = df[col].astype("int64")
+
+    # 8. Drop columns with >60% missing
+    threshold = 0.6 * len(df) if len(df) else 0
     df = df.dropna(axis=1, thresh=int(len(df) - threshold))
 
-    # Drop ID-like columns (unique ratio > 90 %)
+    # 9. Drop ID-like columns (>90% unique objects)
     for col in df.select_dtypes(include="object").columns:
-        if df[col].nunique() / len(df) > 0.9:
+        if df[col].nunique(dropna=True) / max(len(df), 1) > 0.9:
+            df = df.drop(columns=[col])
+
+    # 10. Drop constant columns (one unique value provides no signal, breaks splits)
+    for col in list(df.columns):
+        if col == target_col:
+            continue
+        if df[col].nunique(dropna=False) <= 1:
             df = df.drop(columns=[col])
 
     # Parse date columns
@@ -243,11 +314,6 @@ def clean_data(df: pd.DataFrame, target_col: str = "sales_category") -> pd.DataF
         df[col + "_month"] = df[col].dt.month
         df[col + "_dow"] = df[col].dt.dayofweek
         df = df.drop(columns=[col])
-
-    # Cast bool columns to int — numpy.quantile and many sklearn ops refuse booleans
-    for col in df.columns:
-        if df[col].dtype == bool:
-            df[col] = df[col].astype("int64")
 
     # Create target if absent
     if target_col not in df.columns:
