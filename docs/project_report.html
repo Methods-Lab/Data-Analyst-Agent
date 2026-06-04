@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Data Analyst Agent — Final Project Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Crimson+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:         #FDFAF4;
+    --cream:      #F7F3EC;
+    --cream-deep: #F1E8D9;
+    --surface:    #FFFFFF;
+    --ink:        #2B2A26;
+    --muted:      #6F6A60;
+    --soft:       #9A938A;
+    --coral:      #E07856;
+    --coral-dk:   #D86848;
+    --coral-soft: #FCE5DC;
+    --sage:       #7FA98B;
+    --sage-soft:  #E3EEDF;
+    --honey:      #D9A85C;
+    --honey-soft: #F8EBCF;
+    --border:     #ECE4D6;
+    --shadow:     0 1px 2px rgba(43,42,38,.04), 0 8px 24px rgba(43,42,38,.06);
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:'Inter', sans-serif;
+    color:var(--ink);
+    background:#E5DFCF;
+    line-height:1.6;
+    font-size:11pt;
+  }
+
+  /* ============================= PAGE ============================= */
+  .page{
+    width:210mm;
+    min-height:297mm;
+    padding:22mm 20mm;
+    background:var(--bg);
+    margin:8mm auto;
+    box-shadow:0 4px 30px rgba(0,0,0,.12);
+    page-break-after:always;
+    position:relative;
+    overflow:hidden;
+  }
+  .page:last-child{page-break-after:auto;}
+
+  .page-num{
+    position:absolute;
+    bottom:14mm;left:0;right:0;
+    text-align:center;
+    font-size:9pt;color:var(--soft);
+    letter-spacing:.18em;
+    text-transform:uppercase;
+  }
+  .footer-brand{
+    position:absolute;
+    bottom:14mm;right:20mm;
+    font-size:9pt;color:var(--soft);
+    letter-spacing:.05em;
+  }
+
+  /* ============================= COVER ============================= */
+  .cover{
+    background:
+      radial-gradient(circle at 15% 10%, rgba(224,120,86,.14), transparent 50%),
+      radial-gradient(circle at 85% 90%, rgba(127,169,139,.12), transparent 50%),
+      linear-gradient(135deg, #FAF6EE 0%, #F1E8D9 60%, #E8D5BD 100%);
+    display:flex;flex-direction:column;justify-content:center;align-items:center;
+    text-align:center;
+  }
+  .brand-mark{
+    width:78px;height:78px;border-radius:20px;
+    background:linear-gradient(135deg, var(--coral), var(--honey));
+    color:white;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:28pt;letter-spacing:.02em;
+    box-shadow:0 12px 30px rgba(224,120,86,.35);
+    margin-bottom:28px;
+  }
+  .cover .pre-title{
+    font-size:10pt;font-weight:600;color:var(--coral);
+    letter-spacing:.32em;text-transform:uppercase;
+    margin-bottom:18px;
+  }
+  .cover h1{
+    font-family:'Crimson Pro', serif;
+    font-size:56pt;font-weight:600;color:var(--ink);
+    letter-spacing:-.02em;line-height:1.05;
+    margin-bottom:14px;
+  }
+  .cover .accent-line{
+    width:64px;height:3px;background:var(--coral);
+    margin:18px auto 22px;border-radius:99px;
+  }
+  .cover .subtitle{
+    font-size:14pt;color:var(--muted);
+    font-weight:400;font-style:italic;
+    max-width:480px;line-height:1.45;
+    margin-bottom:60px;
+  }
+  .cover .meta{
+    display:grid;grid-template-columns:auto auto;gap:6px 18px;
+    font-size:10pt;color:var(--muted);
+    text-align:left;
+    padding:18px 24px;
+    border:1px solid var(--border);border-radius:12px;
+    background:rgba(255,255,255,.55);
+    backdrop-filter:blur(8px);
+  }
+  .cover .meta b{color:var(--ink);font-weight:600;}
+  .cover .tags{
+    margin-top:38px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;
+  }
+  .cover .tag{
+    font-size:9pt;font-weight:600;
+    padding:6px 12px;border-radius:99px;
+    background:rgba(255,255,255,.7);border:1px solid var(--border);color:var(--ink);
+  }
+
+  /* ============================= TYPOGRAPHY ============================= */
+  h2.section-heading{
+    font-family:'Crimson Pro', serif;
+    font-size:28pt;font-weight:600;color:var(--ink);
+    letter-spacing:-.01em;margin-bottom:6px;
+    padding-bottom:14px;
+    border-bottom:1px solid var(--border);
+  }
+  .eyebrow{
+    font-size:9pt;font-weight:700;color:var(--coral);
+    letter-spacing:.22em;text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  h3{
+    font-size:14pt;font-weight:700;color:var(--ink);
+    margin:22px 0 10px;
+    letter-spacing:-.005em;
+  }
+  h3.with-rule::before{
+    content:""; display:inline-block;
+    width:4px; height:14px; background:var(--coral);
+    margin-right:10px; vertical-align:middle; border-radius:2px;
+  }
+  h4{
+    font-size:11pt;font-weight:700;color:var(--ink);
+    margin:14px 0 6px;
+  }
+  p{margin-bottom:11px;color:var(--ink);font-size:10.5pt;}
+  ul{margin:8px 0 14px 18px;}
+  ul li{margin-bottom:6px;font-size:10.5pt;color:var(--ink);}
+  ul li::marker{color:var(--coral);}
+  strong{color:var(--ink);font-weight:600;}
+  code{
+    font-family:'JetBrains Mono', monospace;
+    font-size:9.5pt; background:var(--cream); color:var(--coral-dk);
+    padding:1px 6px; border-radius:5px; border:1px solid var(--border);
+  }
+
+  /* ============================= TOC ============================= */
+  .toc{margin-top:14px;}
+  .toc-row{
+    display:flex;align-items:baseline;
+    padding:11px 0;
+    border-bottom:1px dotted var(--border);
+    font-size:11pt;
+  }
+  .toc-num{
+    width:32px;color:var(--coral);font-weight:700;
+    font-family:'JetBrains Mono', monospace;font-size:10pt;
+  }
+  .toc-title{flex:1;color:var(--ink);font-weight:500;}
+  .toc-page{color:var(--muted);font-weight:600;font-size:10pt;}
+
+  /* ============================= CARDS / GRIDS ============================= */
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:14px 0;}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0;}
+  .grid-4{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:14px 0;}
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:18px;
+    box-shadow:var(--shadow);
+  }
+  .card.coral{border-left:4px solid var(--coral);}
+  .card.sage{border-left:4px solid var(--sage);}
+  .card.honey{border-left:4px solid var(--honey);}
+  .card .card-title{
+    font-size:11pt;font-weight:700;color:var(--ink);margin-bottom:6px;
+  }
+  .card .card-body{font-size:10pt;color:var(--muted);line-height:1.55;}
+
+  .feature-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:16px 18px;
+    box-shadow:var(--shadow);
+    position:relative;
+  }
+  .feature-card .num{
+    position:absolute;top:14px;right:16px;
+    font-family:'Crimson Pro', serif;
+    font-size:24pt;font-weight:600;
+    color:var(--coral); opacity:.15;
+    line-height:1;
+  }
+  .feature-card h4{margin-bottom:6px;}
+  .feature-card p{font-size:10pt;color:var(--muted);margin:0;}
+
+  /* ============================= ARCHITECTURE ============================= */
+  .arch{
+    margin:24px 0;display:flex;flex-direction:column;gap:8px;
+  }
+  .arch-layer{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:18px 22px;
+    box-shadow:var(--shadow);
+  }
+  .arch-layer.user{background:var(--cream);}
+  .arch-layer .lbl{
+    font-size:8.5pt;font-weight:700;color:var(--coral);
+    letter-spacing:.22em;text-transform:uppercase;margin-bottom:6px;
+  }
+  .arch-layer .ttl{font-size:13pt;font-weight:700;color:var(--ink);margin-bottom:4px;}
+  .arch-layer .desc{font-size:10pt;color:var(--muted);}
+  .arch-layer.engine{border-left:5px solid var(--coral);}
+  .arch-layer.ai{border-left:5px solid var(--sage);}
+  .arch-arrow{
+    text-align:center;color:var(--coral);font-size:18pt;line-height:1;
+    margin:2px 0;
+  }
+
+  /* ============================= TECH STACK ============================= */
+  .tech-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0;
+  }
+  .tech-item{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:14px;text-align:center;
+    box-shadow:var(--shadow);
+  }
+  .tech-item .icon{
+    width:38px;height:38px;border-radius:10px;
+    margin:0 auto 8px;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:13pt;color:white;
+  }
+  .tech-item.coral .icon  {background:linear-gradient(135deg, var(--coral), var(--coral-dk));}
+  .tech-item.sage  .icon  {background:linear-gradient(135deg, var(--sage), #6B9576);}
+  .tech-item.honey .icon  {background:linear-gradient(135deg, var(--honey), #B8893E);}
+  .tech-item .name{font-weight:700;font-size:10.5pt;color:var(--ink);margin-bottom:2px;}
+  .tech-item .role{font-size:9pt;color:var(--muted);}
+
+  /* ============================= LIBRARY TABLE ============================= */
+  .lib-table{
+    width:100%;border-collapse:collapse;margin-top:14px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;overflow:hidden;
+    box-shadow:var(--shadow);
+  }
+  .lib-table th{
+    background:var(--cream);
+    text-align:left;padding:10px 14px;
+    font-size:9.5pt;font-weight:700;color:var(--ink);
+    text-transform:uppercase;letter-spacing:.06em;
+    border-bottom:1px solid var(--border);
+  }
+  .lib-table td{
+    padding:9px 14px;font-size:10pt;color:var(--ink);
+    border-bottom:1px solid var(--border);
+  }
+  .lib-table tr:last-child td{border-bottom:none;}
+  .lib-table .lib-name{
+    font-family:'JetBrains Mono', monospace;font-size:9.5pt;
+    font-weight:600;color:var(--coral-dk);
+  }
+  .lib-table .lib-cat{
+    font-size:9pt;font-weight:600;color:var(--sage);
+  }
+
+  /* ============================= CAPABILITY BLOCKS ============================= */
+  .cap-list{display:flex;flex-direction:column;gap:10px;margin:12px 0;}
+  .cap-item{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:14px 16px;
+    display:grid;grid-template-columns:auto 1fr;gap:14px;
+    box-shadow:var(--shadow);align-items:start;
+  }
+  .cap-item .bullet{
+    width:30px;height:30px;border-radius:8px;
+    background:var(--coral-soft);color:var(--coral);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:11pt;flex-shrink:0;
+    font-family:'JetBrains Mono', monospace;
+  }
+  .cap-item.sage  .bullet {background:var(--sage-soft); color:#4F7E5C;}
+  .cap-item.honey .bullet {background:var(--honey-soft);color:#8A6A2E;}
+  .cap-item .body h4{margin:0 0 4px;font-size:10.5pt;}
+  .cap-item .body p{margin:0;font-size:9.5pt;color:var(--muted);line-height:1.55;}
+  .cap-item .body code{font-size:8.5pt;}
+
+  /* ============================= CALLOUT ============================= */
+  .callout{
+    background:linear-gradient(135deg, var(--cream), var(--cream-deep));
+    border:1px solid var(--border);
+    border-left:4px solid var(--coral);
+    border-radius:12px;
+    padding:14px 18px;
+    margin:14px 0;
+    font-size:10pt;
+    color:var(--ink);
+  }
+  .callout .label{
+    font-size:9pt;font-weight:700;color:var(--coral);
+    text-transform:uppercase;letter-spacing:.12em;
+    margin-bottom:4px;
+  }
+  .callout.sage  {border-left-color:var(--sage);}
+  .callout.sage .label{color:#4F7E5C;}
+  .callout.honey {border-left-color:var(--honey);}
+  .callout.honey .label{color:#8A6A2E;}
+
+  /* ============================= TWO-COL COMPARE ============================= */
+  .compare{
+    display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0;
+  }
+  .compare .col{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:18px;box-shadow:var(--shadow);
+  }
+  .compare .col.ml { border-top:4px solid var(--coral);}
+  .compare .col.ai { border-top:4px solid var(--sage);}
+  .compare h3{margin-top:0;font-size:12pt;}
+  .compare h3.ml-h::before{background:var(--coral);}
+  .compare h3.ai-h::before{background:var(--sage);}
+  .compare ul{margin:8px 0 0 16px;}
+  .compare ul li{font-size:9.5pt;margin-bottom:5px;}
+
+  /* ============================= TIMELINE ============================= */
+  .timeline{margin:18px 0;position:relative;padding-left:32px;}
+  .timeline::before{
+    content:"";position:absolute;left:11px;top:6px;bottom:6px;
+    width:2px;background:linear-gradient(180deg, var(--coral), var(--honey), var(--sage));
+    border-radius:2px;
+  }
+  .tl-item{position:relative;margin-bottom:18px;}
+  .tl-dot{
+    position:absolute;left:-30px;top:2px;
+    width:24px;height:24px;border-radius:50%;
+    background:var(--coral);color:white;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:9pt;
+    border:3px solid var(--bg);
+  }
+  .tl-item:nth-child(2) .tl-dot{background:var(--coral-dk);}
+  .tl-item:nth-child(3) .tl-dot{background:var(--honey);}
+  .tl-item:nth-child(4) .tl-dot{background:#C29442;}
+  .tl-item:nth-child(5) .tl-dot{background:var(--sage);}
+  .tl-item:nth-child(6) .tl-dot{background:#6B9576;}
+  .tl-item h4{margin:0 0 4px;font-size:11pt;}
+  .tl-item p{font-size:9.5pt;color:var(--muted);margin:0;}
+
+  /* ============================= STAT BAR ============================= */
+  .stat-row{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0;
+  }
+  .stat{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:14px;text-align:center;
+    box-shadow:var(--shadow);
+  }
+  .stat .val{
+    font-family:'Crimson Pro', serif;font-size:22pt;font-weight:600;
+    color:var(--coral);line-height:1;
+  }
+  .stat.sage .val { color:#4F7E5C;}
+  .stat.honey .val{ color:#8A6A2E;}
+  .stat .lbl{
+    font-size:8.5pt;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.08em;
+    margin-top:6px;font-weight:600;
+  }
+
+  /* ============================= MOCKUP CHART ============================= */
+  .mockup-chart{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:16px;margin:14px 0;
+    box-shadow:var(--shadow);
+  }
+  .mockup-chart .title{font-size:10pt;font-weight:700;color:var(--ink);margin-bottom:10px;}
+  .bar-row{
+    display:grid;grid-template-columns:90px 1fr 36px;
+    gap:8px;align-items:center;margin-bottom:7px;font-size:9.5pt;
+  }
+  .bar-row .name{color:var(--ink);font-weight:500;}
+  .bar-row .track{height:9px;background:var(--cream);border-radius:99px;overflow:hidden;}
+  .bar-row .fill{height:100%;background:linear-gradient(90deg, var(--coral), var(--honey));border-radius:99px;}
+  .bar-row .fill.s{background:linear-gradient(90deg, var(--sage), #9BC4A6);}
+  .bar-row .fill.h{background:linear-gradient(90deg, var(--honey), #E9C988);}
+  .bar-row .val{color:var(--muted);font-weight:600;text-align:right;font-size:9pt;}
+
+  /* ============================= PRINT ============================= */
+  @media print {
+    body{background:white;}
+    .page{margin:0;box-shadow:none;page-break-after:always;}
+  }
+</style>
+</head>
+<body>
+
+<!-- =========================================================== -->
+<!-- PAGE 1 — COVER                                              -->
+<!-- =========================================================== -->
+<section class="page cover">
+  <div class="brand-mark">DA</div>
+  <div class="pre-title">Final Project Report</div>
+  <h1>Data Analyst<br>Agent</h1>
+  <div class="accent-line"></div>
+  <div class="subtitle">
+    An Offline Machine-Learning Powered Conversational
+    Analytics Platform for Domain-Agnostic Datasets
+  </div>
+  <div class="meta">
+    <b>Course:</b><span>AI Project — 4th Semester</span>
+    <b>Submitted to:</b><span>[Instructor Name]</span>
+    <b>Submitted by:</b><span>[Your Names / Group]</span>
+    <b>Repository:</b><span>github.com/Methods-Lab/Data-Analyst-Agent</span>
+    <b>Live demo:</b><span>data-analyst-agent.up.railway.app</span>
+  </div>
+  <div class="tags">
+    <span class="tag">Offline ML</span>
+    <span class="tag">Scikit-learn</span>
+    <span class="tag">AutoML</span>
+    <span class="tag">SHAP Explainability</span>
+    <span class="tag">Conversational UI</span>
+  </div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 2 — TABLE OF CONTENTS                                  -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Contents</div>
+  <h2 class="section-heading">Table of Contents</h2>
+
+  <div class="toc">
+    <div class="toc-row"><div class="toc-num">01</div><div class="toc-title">Project Overview &amp; Vision</div><div class="toc-page">03</div></div>
+    <div class="toc-row"><div class="toc-num">02</div><div class="toc-title">System Architecture</div><div class="toc-page">04</div></div>
+    <div class="toc-row"><div class="toc-num">03</div><div class="toc-title">Technology Stack</div><div class="toc-page">05</div></div>
+    <div class="toc-row"><div class="toc-num">04</div><div class="toc-title">Libraries &amp; Dependencies</div><div class="toc-page">06</div></div>
+    <div class="toc-row"><div class="toc-num">05</div><div class="toc-title">Machine-Learning Engine — Responsibilities</div><div class="toc-page">07</div></div>
+    <div class="toc-row"><div class="toc-num">06</div><div class="toc-title">AI Layer — Responsibilities</div><div class="toc-page">08</div></div>
+    <div class="toc-row"><div class="toc-num">07</div><div class="toc-title">Key Features</div><div class="toc-page">09</div></div>
+    <div class="toc-row"><div class="toc-num">08</div><div class="toc-title">End-to-End Workflow</div><div class="toc-page">10</div></div>
+    <div class="toc-row"><div class="toc-num">09</div><div class="toc-title">Prediction Capabilities</div><div class="toc-page">11</div></div>
+    <div class="toc-row"><div class="toc-num">10</div><div class="toc-title">Visualization Capabilities</div><div class="toc-page">12</div></div>
+    <div class="toc-row"><div class="toc-num">11</div><div class="toc-title">Conclusion</div><div class="toc-page">13</div></div>
+  </div>
+
+  <div class="page-num">— Page 02 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 3 — PROJECT OVERVIEW                                   -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 01</div>
+  <h2 class="section-heading">Project Overview &amp; Vision</h2>
+
+  <p style="margin-top:18px;">
+    <strong>Data Analyst Agent</strong> is a conversational machine-learning application that lets any
+    user — technical or non-technical — upload a CSV or Excel dataset and immediately receive
+    predictions, insights, and answers from a trained offline ML model. The user simply uploads
+    a file, clicks <em>Train Agent</em>, and can then chat with the system in plain English to
+    explore the data.
+  </p>
+
+  <h3 class="with-rule">The Problem It Solves</h3>
+  <p>
+    Most analytics tools require users to know SQL, Python, or BI software. Small teams,
+    students, and managers often have valuable spreadsheets but no way to ask questions of
+    them without a data scientist. This project removes that barrier — it analyses any
+    structured dataset and answers questions about it through a chat interface, while a real
+    machine-learning model runs every prediction in the background.
+  </p>
+
+  <h3 class="with-rule">Core Principles</h3>
+  <div class="grid-2">
+    <div class="card coral">
+      <div class="card-title">Domain-agnostic</div>
+      <div class="card-body">Works on any structured tabular dataset — sales, surveys, sensor data, customer records — without prior assumptions about the columns.</div>
+    </div>
+    <div class="card sage">
+      <div class="card-title">Scale-independent</div>
+      <div class="card-body">Handles a few hundred rows or several hundred thousand rows with constant performance through chunked streaming.</div>
+    </div>
+    <div class="card honey">
+      <div class="card-title">Prediction-first</div>
+      <div class="card-body">Real machine-learning predictions are the primary deliverable — every answer is backed by trained models.</div>
+    </div>
+    <div class="card coral">
+      <div class="card-title">Explainable</div>
+      <div class="card-body">Every result is paired with SHAP-based feature importance and a plain-English explanation.</div>
+    </div>
+  </div>
+
+  <div class="callout sage">
+    <div class="label">Project Outcome</div>
+    A fully deployed web application where a user can upload any dataset, train a custom
+    machine-learning model on it, ask questions in natural language, generate three types of
+    professional visualizations, and produce time-series forecasts, regression predictions,
+    and classification analyses — all in seconds.
+  </div>
+
+  <div class="page-num">— Page 03 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 4 — SYSTEM ARCHITECTURE                                -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 02</div>
+  <h2 class="section-heading">System Architecture</h2>
+
+  <p style="margin-top:18px;">
+    The system is built as a three-layer pipeline. Data flows from the user interface down
+    through the offline ML engine and back up through the response layer.
+  </p>
+
+  <div class="arch">
+    <div class="arch-layer user">
+      <div class="lbl">Layer 1 — User Interface</div>
+      <div class="ttl">Streamlit Web Application</div>
+      <div class="desc">Three-column layout: file upload sidebar, central workspace with metrics &amp; charts, right-hand chat panel.</div>
+    </div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-layer engine">
+      <div class="lbl">Layer 2 — Machine-Learning Engine  ·  THE BRAIN</div>
+      <div class="ttl">Scikit-learn AutoML Pipeline</div>
+      <div class="desc">
+        Reads &amp; structures the dataset, detects the target column, trains DecisionTree +
+        RandomForest classifiers, computes SHAP feature importance, runs 5-fold
+        cross-validation, exposes deductive &amp; abductive reasoning, builds regression
+        and time-series forecasting models on demand.
+      </div>
+    </div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-layer ai">
+      <div class="lbl">Layer 3 — Conversational Response Layer</div>
+      <div class="ttl">Natural-Language Explanation</div>
+      <div class="desc">Takes the ML model's structured numeric output and converts it into bullet-pointed plain-English answers for non-technical users.</div>
+    </div>
+  </div>
+
+  <h3 class="with-rule">Design Principle</h3>
+  <p>
+    Every prediction, every metric, every chart on screen is computed by the offline ML
+    engine. The system is fully reproducible — given the same inputs, the same model
+    produces the same numbers every time. The conversational layer adds polish to the
+    delivery but never changes the underlying analysis.
+  </p>
+
+  <div class="callout">
+    <div class="label">Reproducibility</div>
+    Models are persisted to disk after training (<code>models.pkl</code>,
+    <code>rules.json</code>, <code>feature_importances.pkl</code>) so predictions can be
+    re-run, audited, or exported at any time.
+  </div>
+
+  <div class="page-num">— Page 04 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 5 — TECHNOLOGY STACK                                   -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 03</div>
+  <h2 class="section-heading">Technology Stack</h2>
+
+  <p style="margin-top:18px;">
+    The application is built entirely in Python, with a Streamlit-powered frontend and a
+    scikit-learn machine-learning backend. Deployment is handled by Railway with continuous
+    integration from GitHub.
+  </p>
+
+  <h3 class="with-rule">Core Stack</h3>
+  <div class="tech-grid">
+    <div class="tech-item coral">
+      <div class="icon">Py</div>
+      <div class="name">Python 3.11+</div>
+      <div class="role">Application language</div>
+    </div>
+    <div class="tech-item coral">
+      <div class="icon">St</div>
+      <div class="name">Streamlit 1.57</div>
+      <div class="role">Web framework &amp; UI</div>
+    </div>
+    <div class="tech-item sage">
+      <div class="icon">Sk</div>
+      <div class="name">Scikit-learn 1.8</div>
+      <div class="role">Machine-learning core</div>
+    </div>
+    <div class="tech-item sage">
+      <div class="icon">Pd</div>
+      <div class="name">Pandas 3.0</div>
+      <div class="role">Data manipulation</div>
+    </div>
+    <div class="tech-item honey">
+      <div class="icon">Pl</div>
+      <div class="name">Plotly 6.7</div>
+      <div class="role">Interactive visualizations</div>
+    </div>
+    <div class="tech-item honey">
+      <div class="icon">Sh</div>
+      <div class="name">SHAP 0.49</div>
+      <div class="role">Model explainability</div>
+    </div>
+  </div>
+
+  <h3 class="with-rule">Deployment &amp; Tooling</h3>
+  <div class="tech-grid">
+    <div class="tech-item coral">
+      <div class="icon">Gh</div>
+      <div class="name">GitHub</div>
+      <div class="role">Source control &amp; CI trigger</div>
+    </div>
+    <div class="tech-item sage">
+      <div class="icon">Rw</div>
+      <div class="name">Railway</div>
+      <div class="role">Cloud hosting &amp; deployment</div>
+    </div>
+    <div class="tech-item honey">
+      <div class="icon">Np</div>
+      <div class="name">NumPy 2.4</div>
+      <div class="role">Numerical computation</div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <div class="label">Why this stack</div>
+    Scikit-learn was chosen because tree-based ensembles consistently outperform deep
+    learning on tabular structured data, train fast without GPUs, scale from small to
+    large datasets, and remain interpretable through SHAP. Streamlit provides the
+    fastest path from Python code to a production-grade web interface with no separate
+    frontend codebase to maintain.
+  </div>
+
+  <div class="page-num">— Page 05 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 6 — LIBRARIES                                          -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 04</div>
+  <h2 class="section-heading">Libraries &amp; Dependencies</h2>
+
+  <p style="margin-top:18px;">
+    Every library used in the project, what it does, and which layer of the system
+    depends on it.
+  </p>
+
+  <table class="lib-table">
+    <thead>
+      <tr><th>Library</th><th>Category</th><th>Purpose in this project</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="lib-name">streamlit</span></td>
+        <td><span class="lib-cat">UI</span></td>
+        <td>Web frontend, chat interface, file upload, layout, dialogs</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">pandas</span></td>
+        <td><span class="lib-cat">Data</span></td>
+        <td>DataFrames, cleaning, type casting, missing-value handling, group-by analytics</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">numpy</span></td>
+        <td><span class="lib-cat">Data</span></td>
+        <td>Vectorised numeric operations, array math, statistical computations</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">scikit-learn</span></td>
+        <td><span class="lib-cat">ML Core</span></td>
+        <td>DecisionTreeClassifier, RandomForestClassifier, LinearRegression, RandomForestRegressor, train_test_split, cross_val_score, permutation_importance, LabelEncoder, TfidfVectorizer, cosine_similarity</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">shap</span></td>
+        <td><span class="lib-cat">ML Explainability</span></td>
+        <td>TreeExplainer for global &amp; per-prediction feature attribution</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">plotly</span></td>
+        <td><span class="lib-cat">Visualization</span></td>
+        <td>Interactive correlation heatmaps, scatter plots, distribution histograms, bar charts</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">openpyxl</span></td>
+        <td><span class="lib-cat">I/O</span></td>
+        <td>Reading .xlsx and .xls files including multi-sheet workbooks</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">faker</span></td>
+        <td><span class="lib-cat">Demo Data</span></td>
+        <td>Generating realistic synthetic sales data for testing &amp; demo mode</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">requests / httpx</span></td>
+        <td><span class="lib-cat">Networking</span></td>
+        <td>HTTP client for AI explanation layer</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">groq</span></td>
+        <td><span class="lib-cat">Conversational AI</span></td>
+        <td>Natural-language layer that converts ML output into plain-English bullet points</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">python-dotenv</span></td>
+        <td><span class="lib-cat">Config</span></td>
+        <td>Environment-variable loading for local development</td>
+      </tr>
+      <tr>
+        <td><span class="lib-name">joblib / pickle</span></td>
+        <td><span class="lib-cat">Persistence</span></td>
+        <td>Serialising trained models &amp; importance payloads to disk</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-num">— Page 06 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 7 — ML ENGINE RESPONSIBILITIES                         -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 05</div>
+  <h2 class="section-heading">Machine-Learning Engine</h2>
+
+  <p style="margin-top:18px;">
+    The offline ML engine is the analytical core of the application. Every prediction,
+    every chart, every metric the user sees comes from these scikit-learn-based components.
+    No external service is involved in any analytical computation.
+  </p>
+
+  <div class="cap-list">
+    <div class="cap-item">
+      <div class="bullet">01</div>
+      <div class="body">
+        <h4>Dataset Ingestion &amp; Structuring</h4>
+        <p>Reads CSV / Excel files in memory-safe chunks. Detects column types (numeric, categorical, datetime, ID), parses dates, handles encoding issues (UTF-8, Latin-1), flattens multi-sheet workbooks, and infers the most likely prediction target.</p>
+      </div>
+    </div>
+    <div class="cap-item sage">
+      <div class="bullet">02</div>
+      <div class="body">
+        <h4>Data Cleaning &amp; Preprocessing</h4>
+        <p>Drops empty &amp; ID columns, imputes missing numeric values with the median and categorical values with the mode, encodes string categories as integer codes via <code>LabelEncoder</code>, and produces a fully model-ready DataFrame.</p>
+      </div>
+    </div>
+    <div class="cap-item honey">
+      <div class="bullet">03</div>
+      <div class="body">
+        <h4>Model Training — AutoML Pipeline</h4>
+        <p>Trains a <code>DecisionTreeClassifier</code> (extracts human-readable IF-THEN rules) and a <code>RandomForestClassifier</code> (200 trees, parallel). Uses stratified train/test split with safe fallback when classes are imbalanced.</p>
+      </div>
+    </div>
+    <div class="cap-item">
+      <div class="bullet">04</div>
+      <div class="body">
+        <h4>Cross-Validation &amp; Overfitting Guard</h4>
+        <p>Runs 5-fold cross-validation on a representative sample to produce a statistically sound generalisation accuracy estimate (mean ± standard deviation), independent of any single train/test split.</p>
+      </div>
+    </div>
+    <div class="cap-item sage">
+      <div class="bullet">05</div>
+      <div class="body">
+        <h4>Feature Importance — SHAP &amp; Permutation</h4>
+        <p>Computes SHAP values on the winning model using <code>TreeExplainer</code> for both global feature ranking and per-prediction attribution. Falls back to permutation importance when SHAP is unavailable.</p>
+      </div>
+    </div>
+    <div class="cap-item honey">
+      <div class="bullet">06</div>
+      <div class="body">
+        <h4>Deductive Reasoning — Forward Chaining</h4>
+        <p>Given user-supplied feature values, traverses the IF-THEN rule base extracted from the trained DecisionTree and returns the best-matching prediction with confidence and supporting rule conditions.</p>
+      </div>
+    </div>
+    <div class="cap-item">
+      <div class="bullet">07</div>
+      <div class="body">
+        <h4>Abductive Reasoning — Best-Explanation Inference</h4>
+        <p>Given an observed outcome class, ranks the features most likely responsible for it using permutation importance and a Naive-Bayes <code>BayesianAbducer</code> for posterior probability hints.</p>
+      </div>
+    </div>
+    <div class="cap-item sage">
+      <div class="bullet">08</div>
+      <div class="body">
+        <h4>Regression — On-Demand Training</h4>
+        <p>Trains a <code>RandomForestRegressor</code> inline when the user wants to predict a numeric column. Reports the prediction value, training R², and the top contributing features.</p>
+      </div>
+    </div>
+    <div class="cap-item honey">
+      <div class="bullet">09</div>
+      <div class="body">
+        <h4>Time-Series Forecasting</h4>
+        <p>Uses <code>LinearRegression</code> over monthly-resampled date columns to project numeric values forward by N periods. Reports trend direction, average, and projected percentage change.</p>
+      </div>
+    </div>
+    <div class="cap-item">
+      <div class="bullet">10</div>
+      <div class="body">
+        <h4>Visualization Engine</h4>
+        <p>Builds correlation heatmaps, scatter plots of the most strongly correlated pair, and distribution histograms — all using pandas statistics &amp; plotly rendering with the application's brand palette.</p>
+      </div>
+    </div>
+    <div class="cap-item sage">
+      <div class="bullet">11</div>
+      <div class="body">
+        <h4>Text Retrieval Engine</h4>
+        <p>For text-heavy datasets, builds a <code>TfidfVectorizer</code> index over the rows and uses cosine similarity to retrieve the most relevant document evidence for any user query.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-num">— Page 07 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 8 — AI LAYER RESPONSIBILITIES                          -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 06</div>
+  <h2 class="section-heading">AI Layer — Conversational Response</h2>
+
+  <p style="margin-top:18px;">
+    The AI layer plays a single, well-defined role: turning the ML engine's structured numeric
+    output into plain-English answers a non-technical user can read. It never makes a
+    prediction, never computes a statistic, and never decides what to predict. It is the
+    "voice" of the analysis.
+  </p>
+
+  <h3 class="with-rule">Specific Responsibilities</h3>
+  <div class="cap-list">
+    <div class="cap-item">
+      <div class="bullet">A</div>
+      <div class="body">
+        <h4>Translating ML output into natural language</h4>
+        <p>When the ML model returns a prediction with confidence and feature importances,
+        the AI layer writes a short bullet-pointed explanation of what it means in business terms.</p>
+      </div>
+    </div>
+    <div class="cap-item sage">
+      <div class="bullet">B</div>
+      <div class="body">
+        <h4>Answering conversational chat messages</h4>
+        <p>Handles greetings, follow-up questions, and clarifications. Always grounded in the
+        actual data context (column names, distributions, percentages) provided by the ML engine.</p>
+      </div>
+    </div>
+    <div class="cap-item honey">
+      <div class="bullet">C</div>
+      <div class="body">
+        <h4>Refusing fabricated answers</h4>
+        <p>Strict anti-hallucination guardrails: if the user references a column, name,
+        or concept that is not present in the dataset, the AI layer is forced to refuse and
+        list the actual columns instead of inventing statistics.</p>
+      </div>
+    </div>
+    <div class="cap-item">
+      <div class="bullet">D</div>
+      <div class="body">
+        <h4>Enforcing consistent formatting</h4>
+        <p>Every analytical answer is rendered in the same structure: a bold headline sentence
+        followed by three to four bullet points, each containing a specific number, column
+        name, or percentage from the data.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="with-rule">Strict Boundary</h3>
+  <div class="callout sage">
+    <div class="label">Important Distinction</div>
+    The AI layer <strong>never decides which predictions are possible</strong>, never trains
+    a model, and never computes a number. Every option shown in the Predict dialog, every
+    metric on the dashboard, every chart, and every importance ranking comes directly from
+    the trained scikit-learn models. The AI only writes the surrounding prose.
+  </div>
+
+  <h3 class="with-rule">Side-by-Side Responsibility Split</h3>
+  <div class="compare">
+    <div class="col ml">
+      <h3 class="with-rule ml-h">Machine-Learning Engine</h3>
+      <ul>
+        <li>Trains all models (Decision Tree, Random Forest, Linear &amp; RF Regression)</li>
+        <li>Computes feature importance via SHAP and permutation</li>
+        <li>Runs 5-fold cross-validation</li>
+        <li>Forecasts numeric columns over time</li>
+        <li>Calculates correlations &amp; statistics</li>
+        <li>Generates all visualizations</li>
+        <li>Performs deductive &amp; abductive reasoning</li>
+        <li>Detects which prediction types the dataset supports</li>
+      </ul>
+    </div>
+    <div class="col ai">
+      <h3 class="with-rule ai-h">AI Layer</h3>
+      <ul>
+        <li>Writes bullet-pointed explanations</li>
+        <li>Handles greetings and conversational turns</li>
+        <li>Refuses to answer about non-existent columns</li>
+        <li>Adds business context to numeric results</li>
+        <li>Maintains plain-English tone for non-technical users</li>
+        <li>Formats consistently (headline + bullets)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="page-num">— Page 08 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 9 — KEY FEATURES                                       -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 07</div>
+  <h2 class="section-heading">Key Features</h2>
+
+  <p style="margin-top:18px;">
+    Eight headline capabilities the user can interact with directly from the interface.
+  </p>
+
+  <div class="grid-4">
+    <div class="feature-card">
+      <div class="num">01</div>
+      <h4>Universal File Upload</h4>
+      <p>Accepts CSV, XLSX, and XLS. Auto-detects sheets, encodings, and headers.</p>
+    </div>
+    <div class="feature-card">
+      <div class="num">02</div>
+      <h4>One-Click Training</h4>
+      <p>A single button runs the full pipeline: clean, encode, train, validate, persist.</p>
+    </div>
+    <div class="feature-card">
+      <div class="num">03</div>
+      <h4>Dynamic Prediction Engine</h4>
+      <p>Auto-lists every prediction type the dataset supports — forecast, classify, regress, custom.</p>
+    </div>
+    <div class="feature-card">
+      <div class="num">04</div>
+      <h4>Interactive Visualizations</h4>
+      <p>Three professional chart types: correlation heatmap, scatter plot, distribution histogram.</p>
+    </div>
+    <div class="feature-card">
+      <div class="num">05</div>
+      <h4>Conversational Chat Interface</h4>
+      <p>Ask any question about the data in plain English — always grounded in the trained model.</p>
+    </div>
+    <div class="feature-card">
+      <div class="num">06</div>
+      <h4>Hallucination-Proof Guardrails</h4>
+      <p>Two-layer column-reference validation prevents answers about non-existent fields.</p>
+    </div>
+    <div class="feature-card">
+      <div class="num">07</div>
+      <h4>SHAP Explainability</h4>
+      <p>Every winning model surfaces its top drivers via SHAP values for transparent decisions.</p>
+    </div>
+    <div class="feature-card">
+      <div class="num">08</div>
+      <h4>Recent Files Memory</h4>
+      <p>Keeps a sidebar history of recently trained files for quick context switching.</p>
+    </div>
+  </div>
+
+  <h3 class="with-rule">Quick-Action Pinned Buttons</h3>
+  <p>
+    The workspace exposes six one-click actions that the user can run at any time:
+    <code>Summarize</code>, <code>Top drivers</code>, <code>Missing values</code>,
+    <code>Why high?</code>, <code>Predict</code>, and <code>Visualize</code> — each
+    runs a real ML routine and returns a structured answer.
+  </p>
+
+  <div class="page-num">— Page 09 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 10 — END-TO-END WORKFLOW                               -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 08</div>
+  <h2 class="section-heading">End-to-End Workflow</h2>
+
+  <p style="margin-top:18px;">
+    A complete pass from raw upload to answered question — the sequence the application
+    follows every time a new dataset is loaded.
+  </p>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-dot">1</div>
+      <h4>File Upload</h4>
+      <p>User drags a CSV or Excel file into the sidebar. The system streams it in 200,000-row chunks to stay memory-flat on large files.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot">2</div>
+      <h4>Schema Detection &amp; Cleaning</h4>
+      <p>The ML engine inspects column types, drops ID and empty columns, imputes missing values, encodes categoricals, and emits a fully structured DataFrame.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot">3</div>
+      <h4>Model Training</h4>
+      <p>DecisionTree + RandomForest are trained on the cleaned data. Rules are extracted to <code>rules.json</code>; the trained models are serialised to <code>models.pkl</code>.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot">4</div>
+      <h4>Validation &amp; Explainability</h4>
+      <p>5-fold cross-validation produces the generalisation accuracy. SHAP TreeExplainer computes per-feature contributions saved to <code>feature_importances.pkl</code>.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot">5</div>
+      <h4>User Interaction</h4>
+      <p>The workspace populates with metrics, an impact chart, and the chat panel. The user can click a pinned action or type a question.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot">6</div>
+      <h4>Answer Generation</h4>
+      <p>The ML engine computes the requested analysis. The conversational layer formats the result as a bullet-pointed explanation. The response appears in the chat panel within seconds.</p>
+    </div>
+  </div>
+
+  <div class="callout honey">
+    <div class="label">End-to-end latency</div>
+    On a typical 10,000-row sales dataset: upload &lt; 1s, cleaning ~ 1s, training ~ 3–5s,
+    visualizations &lt; 1s, chat replies 1–2s. The entire pipeline runs locally on the
+    deployment server with no external dependencies for the analytical steps.
+  </div>
+
+  <div class="page-num">— Page 10 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 11 — PREDICTION CAPABILITIES                           -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 09</div>
+  <h2 class="section-heading">Prediction Capabilities</h2>
+
+  <p style="margin-top:18px;">
+    When the user clicks <code>Predict</code>, the system inspects the dataset's actual
+    columns and dynamically lists every prediction type it can perform. Nothing is
+    hardcoded — the options change with every dataset.
+  </p>
+
+  <div class="grid-2">
+    <div class="card coral">
+      <div class="card-title">Time-Series Forecast</div>
+      <div class="card-body">For any numeric column with an associated date column, the system uses scikit-learn's <code>LinearRegression</code> on monthly-resampled values to project the column forward by a user-chosen number of months. Reports trend direction, monthly average, and projected percentage change.</div>
+    </div>
+    <div class="card sage">
+      <div class="card-title">Classification</div>
+      <div class="card-body">Uses the already-trained DecisionTree + RandomForest. The user picks a class to understand (abductive analysis) or supplies feature values for a custom prediction (deductive analysis). Returns prediction, confidence, and supporting rule conditions.</div>
+    </div>
+    <div class="card honey">
+      <div class="card-title">Regression</div>
+      <div class="card-body">For any numeric column, trains a <code>RandomForestRegressor</code> inline using all other numeric features. The user supplies known values; blanks default to the column median. Returns the predicted value, training R², and top contributing features.</div>
+    </div>
+    <div class="card coral">
+      <div class="card-title">Custom Free-Text</div>
+      <div class="card-body">User describes a prediction in plain English. The system validates every referenced column name against the actual dataset, auto-corrects close matches via fuzzy matching, and rejects clearly out-of-context references with the list of available columns.</div>
+    </div>
+  </div>
+
+  <h3 class="with-rule">Sample Output — Time-Series Forecast</h3>
+  <div class="callout">
+    <div class="label">ML model response</div>
+    <strong>Forecast for unit_price — increasing trend</strong><br>
+    Historical monthly average: 124.87 (over 24 months)<br>
+    Projected change end-of-horizon: +18.4%<br>
+    Next 6 months projected: 2026-06: 142.31 · 2026-07: 145.08 · 2026-08: 147.85 …
+  </div>
+
+  <h3 class="with-rule">Sample Output — Classification</h3>
+  <div class="callout sage">
+    <div class="label">ML model response</div>
+    <strong>Best explanation for outcome `high`</strong><br>
+    • <code>net_sales</code> — importance 0.4823. Tends to be HIGH when net_sales is large.<br>
+    • <code>discount_pct</code> — importance 0.1729. Tends to be HIGH when discount_pct is small.<br>
+    • <code>quantity</code> — importance 0.1218. Tends to be HIGH when quantity is large.
+  </div>
+
+  <div class="page-num">— Page 11 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 12 — VISUALIZATION CAPABILITIES                        -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 10</div>
+  <h2 class="section-heading">Visualization Capabilities</h2>
+
+  <p style="margin-top:18px;">
+    Visualisation is treated as a first-class feature of the exploratory data analysis
+    (EDA) phase. All charts are computed by pandas correlation math and rendered with
+    plotly using the application's brand palette.
+  </p>
+
+  <div class="grid-3">
+    <div class="card coral">
+      <div class="card-title">Correlation Heatmap</div>
+      <div class="card-body">Pairwise correlation between every numeric column shown on a coral-cream-sage diverging color scale from −1 to +1. Cells annotated with the exact correlation value.</div>
+    </div>
+    <div class="card sage">
+      <div class="card-title">Scatter Plot</div>
+      <div class="card-body">Automatically picks the two numeric columns with the strongest absolute correlation in the dataset and renders their relationship with the signed correlation in the title.</div>
+    </div>
+    <div class="card honey">
+      <div class="card-title">Distribution Histogram</div>
+      <div class="card-body">User selects any numeric column; the system renders its frequency distribution with 30 bins. Below the chart it reports average, median, min, and max.</div>
+    </div>
+  </div>
+
+  <h3 class="with-rule">Most Impactful Columns Dashboard</h3>
+  <p>
+    In addition to the on-demand visualisations, the main workspace always displays a
+    horizontal bar chart of the top eight columns ranked by SHAP importance. This gives
+    the user an immediate visual sense of what drives the model's predictions.
+  </p>
+
+  <div class="mockup-chart">
+    <div class="title">Most impactful columns — what drives the predictions most</div>
+    <div class="bar-row"><div class="name">net_sales</div><div class="track"><div class="fill" style="width:92%"></div></div><div class="val">0.92</div></div>
+    <div class="bar-row"><div class="name">discount_pct</div><div class="track"><div class="fill s" style="width:74%"></div></div><div class="val">0.74</div></div>
+    <div class="bar-row"><div class="name">quantity</div><div class="track"><div class="fill h" style="width:61%"></div></div><div class="val">0.61</div></div>
+    <div class="bar-row"><div class="name">region</div><div class="track"><div class="fill" style="width:48%"></div></div><div class="val">0.48</div></div>
+    <div class="bar-row"><div class="name">product_category</div><div class="track"><div class="fill s" style="width:35%"></div></div><div class="val">0.35</div></div>
+    <div class="bar-row"><div class="name">delivery_days</div><div class="track"><div class="fill h" style="width:22%"></div></div><div class="val">0.22</div></div>
+  </div>
+
+  <div class="callout">
+    <div class="label">Caption shown to the user</div>
+    "Values near +1 (coral) mean two columns move together; values near −1 (sage) mean
+    they move opposite; values near 0 mean little relationship."
+  </div>
+
+  <div class="page-num">— Page 12 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+<!-- =========================================================== -->
+<!-- PAGE 13 — CONCLUSION                                        -->
+<!-- =========================================================== -->
+<section class="page">
+  <div class="eyebrow">Section 11</div>
+  <h2 class="section-heading">Conclusion</h2>
+
+  <div class="stat-row">
+    <div class="stat"><div class="val">11</div><div class="lbl">ML Routines</div></div>
+    <div class="stat sage"><div class="val">8</div><div class="lbl">Key Features</div></div>
+    <div class="stat honey"><div class="val">4</div><div class="lbl">Prediction Types</div></div>
+    <div class="stat"><div class="val">3</div><div class="lbl">Chart Types</div></div>
+  </div>
+
+  <h3 class="with-rule">What Was Delivered</h3>
+  <p>
+    A fully functional, publicly deployed web application that demonstrates the complete
+    machine-learning lifecycle on arbitrary tabular data. The system was built end-to-end:
+    file ingestion, automated cleaning, dual-model training (decision tree + random forest),
+    SHAP explainability, cross-validation, time-series forecasting, regression, classification,
+    correlation analysis, and a conversational chat interface — all wrapped in a polished
+    custom-themed Streamlit UI and deployed with continuous integration on Railway.
+  </p>
+
+  <h3 class="with-rule">Educational Value</h3>
+  <ul>
+    <li>Demonstrates the complete supervised-learning workflow from raw data to predictions</li>
+    <li>Exposes both tree-based interpretable models (DecisionTree) and ensemble accuracy (RandomForest)</li>
+    <li>Implements SHAP and permutation importance — current state of practice in ML explainability</li>
+    <li>Applies cross-validation to demonstrate honest generalisation estimates</li>
+    <li>Shows real-world software engineering: deployment, version control, error handling, UI design</li>
+  </ul>
+
+  <h3 class="with-rule">Why It Matters</h3>
+  <p>
+    The project bridges the gap between machine-learning theory and practical analytics. A
+    non-technical user with a spreadsheet can now access the same modelling techniques that
+    previously required a dedicated data scientist. The architecture is deliberately
+    domain-agnostic so the same system works for sales data, customer surveys, sensor
+    readings, or academic datasets without modification.
+  </p>
+
+  <div class="callout sage" style="margin-top:24px;">
+    <div class="label">Final Note</div>
+    The offline ML engine is the foundation of every analytical claim the application makes.
+    The conversational layer is the polished surface that makes those claims accessible
+    to anyone. Together they form a complete, reproducible, and explainable data-analysis
+    system suitable for both academic evaluation and real-world use.
+  </div>
+
+  <div style="text-align:center;margin-top:50px;padding-top:30px;border-top:1px solid var(--border);">
+    <div style="font-family:'Crimson Pro', serif;font-size:14pt;color:var(--ink);font-style:italic;">
+      — End of Report —
+    </div>
+    <div style="font-size:9pt;color:var(--soft);margin-top:8px;letter-spacing:.15em;">
+      DATA ANALYST AGENT &nbsp;·&nbsp; FINAL PROJECT
+    </div>
+  </div>
+
+  <div class="page-num">— Page 13 —</div>
+  <div class="footer-brand">Data Analyst Agent</div>
+</section>
+
+</body>
+</html>

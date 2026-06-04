@@ -43,7 +43,7 @@ log = logging.getLogger(__name__)
 # --------------------------------------------------------------------------
 # Module under test
 # --------------------------------------------------------------------------
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import groq_cleaner
 
 

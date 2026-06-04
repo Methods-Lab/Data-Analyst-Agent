@@ -36,9 +36,11 @@ except ImportError:
     _SHAP_AVAILABLE = False
 
 # Paths for persisted artefacts
-RULES_PATH = Path("rules.json")
-IMPORTANCE_PATH = Path("feature_importances.pkl")
-MODEL_PATH = Path("models.pkl")
+_ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
+_ARTIFACTS.mkdir(exist_ok=True)
+RULES_PATH = _ARTIFACTS / "rules.json"
+IMPORTANCE_PATH = _ARTIFACTS / "feature_importances.pkl"
+MODEL_PATH = _ARTIFACTS / "models.pkl"
 
 
 # ---------------------------------------------------------------------------

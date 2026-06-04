@@ -22,8 +22,9 @@ from typing import Any
 
 import numpy as np
 
-RULES_PATH = Path("rules.json")
-IMPORTANCE_PATH = Path("feature_importances.pkl")
+_ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
+RULES_PATH = _ARTIFACTS / "rules.json"
+IMPORTANCE_PATH = _ARTIFACTS / "feature_importances.pkl"
 
 
 # ---------------------------------------------------------------------------

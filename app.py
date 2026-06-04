@@ -30,8 +30,22 @@ import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-import data_loader as dl
 import groq_cleaner as _gc
+
+# Pipeline steps live in eda/ — these modules ARE what the app uses
+# at runtime. data_loader / trainer / reasoner / abduction are
+# re-exported by the step modules so the EDA folder is the single
+# source of truth for what each pipeline step does.
+import eda.step_1_loading        # noqa: F401  (Step 1 — file ingestion)
+import eda.step_2_cleaning       # noqa: F401  (Step 2 — cleaning + NA handling)
+import eda.step_3_exploration    # noqa: F401  (Step 3 — profiling + correlations)
+import eda.step_4_preprocessing  # noqa: F401  (Step 4 — encoding + split + target)
+import eda.step_5_training       # noqa: F401  (Step 5 — DT + RF training)
+import eda.step_6_evaluation     # noqa: F401  (Step 6 — accuracy + SHAP + CV)
+import eda.step_7_prediction     # noqa: F401  (Step 7 — deduce + abduce + forecast)
+
+# Convenient short aliases used throughout the app body
+import data_loader as dl
 import reasoner
 import trainer
 from abduction import try_bayesian_abduce
@@ -774,7 +788,7 @@ def dataset_context_for_llm(prompt: str) -> str:
         lines.append(f"\nPrediction target '{target}': {dist}")
 
     # Most impactful columns ranked
-    if Path("feature_importances.pkl").exists():
+    if Path("artifacts/feature_importances.pkl").exists():
         try:
             imp_data = trainer.load_importances()
             imp      = imp_data.get("shap_importances") or imp_data.get("importances", {})
@@ -1003,7 +1017,7 @@ def answer_with_data(prompt: str) -> str:
         )
 
     if any(word in low_prompt for word in ["important", "importance", "driver", "drivers", "influence"]):
-        if train_result and Path("feature_importances.pkl").exists():
+        if train_result and Path("artifacts/feature_importances.pkl").exists():
             imp_data = trainer.load_importances()
             ranked = sorted(imp_data["importances"].items(), key=lambda item: item[1], reverse=True)[:8]
             lines = [f"- {feature}: {score:.4f}" for feature, score in ranked]
@@ -2092,7 +2106,7 @@ with workspace_col:
     )
 
     # Most impactful columns chart — or empty-state placeholder
-    if st.session_state.df_raw is not None and Path("feature_importances.pkl").exists():
+    if st.session_state.df_raw is not None and Path("artifacts/feature_importances.pkl").exists():
         try:
             import plotly.express as _px
             imp_payload = trainer.load_importances()
