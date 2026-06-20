@@ -1,188 +1,60 @@
 {
   "feature_names": [
-    "revenue",
-    "qty",
-    "region"
+    "order_id",
+    "customer_city",
+    "region",
+    "product_category",
+    "unit_price",
+    "quantity",
+    "discount_pct",
+    "discount_amount",
+    "gross_sales",
+    "net_sales",
+    "shipping_cost",
+    "payment_method",
+    "customer_rating",
+    "return_flag",
+    "repeat_customer",
+    "delivery_days",
+    "season",
+    "date_year",
+    "date_month",
+    "date_dow"
   ],
   "class_names": [
-    "lost",
-    "pending",
-    "won"
+    "high",
+    "low",
+    "medium"
   ],
-  "target_col": "status",
+  "target_col": "sales_category",
   "tree_depth": 5,
-  "accuracy": 0.3125,
+  "accuracy": 0.995,
   "rules": [
     {
       "conditions": [
-        "revenue <= 4251.1399",
-        "revenue <= 4013.4850",
-        "revenue <= 3372.5250",
-        "region <= 0.5000"
+        "net_sales <= 9429.6450"
       ],
-      "prediction": "lost",
-      "confidence": 0.52,
-      "samples": 25
+      "prediction": "low",
+      "confidence": 1.0,
+      "samples": 264
     },
     {
       "conditions": [
-        "revenue <= 4251.1399",
-        "revenue <= 4013.4850",
-        "revenue <= 3372.5250",
-        "region > 0.5000",
-        "qty <= 11.5000"
+        "net_sales > 9429.6450",
+        "net_sales <= 26893.8447"
       ],
-      "prediction": "lost",
-      "confidence": 0.3939,
-      "samples": 33
+      "prediction": "medium",
+      "confidence": 1.0,
+      "samples": 272
     },
     {
       "conditions": [
-        "revenue <= 4251.1399",
-        "revenue <= 4013.4850",
-        "revenue <= 3372.5250",
-        "region > 0.5000",
-        "qty > 11.5000"
+        "net_sales > 9429.6450",
+        "net_sales > 26893.8447"
       ],
-      "prediction": "won",
-      "confidence": 0.5152,
-      "samples": 33
-    },
-    {
-      "conditions": [
-        "revenue <= 4251.1399",
-        "revenue <= 4013.4850",
-        "revenue > 3372.5250",
-        "qty <= 7.5000"
-      ],
-      "prediction": "pending",
-      "confidence": 0.5217,
-      "samples": 23
-    },
-    {
-      "conditions": [
-        "revenue <= 4251.1399",
-        "revenue <= 4013.4850",
-        "revenue > 3372.5250",
-        "qty > 7.5000",
-        "qty <= 14.5000"
-      ],
-      "prediction": "won",
-      "confidence": 0.4375,
-      "samples": 32
-    },
-    {
-      "conditions": [
-        "revenue <= 4251.1399",
-        "revenue <= 4013.4850",
-        "revenue > 3372.5250",
-        "qty > 7.5000",
-        "qty > 14.5000"
-      ],
-      "prediction": "pending",
-      "confidence": 0.5,
-      "samples": 20
-    },
-    {
-      "conditions": [
-        "revenue <= 4251.1399",
-        "revenue > 4013.4850"
-      ],
-      "prediction": "won",
-      "confidence": 0.6053,
-      "samples": 38
-    },
-    {
-      "conditions": [
-        "revenue > 4251.1399",
-        "revenue <= 4453.0549"
-      ],
-      "prediction": "lost",
-      "confidence": 0.5333,
-      "samples": 30
-    },
-    {
-      "conditions": [
-        "revenue > 4251.1399",
-        "revenue > 4453.0549",
-        "qty <= 16.5000",
-        "region <= 2.5000",
-        "revenue <= 5479.8301"
-      ],
-      "prediction": "pending",
-      "confidence": 0.3535,
-      "samples": 99
-    },
-    {
-      "conditions": [
-        "revenue > 4251.1399",
-        "revenue > 4453.0549",
-        "qty <= 16.5000",
-        "region <= 2.5000",
-        "revenue > 5479.8301"
-      ],
-      "prediction": "won",
-      "confidence": 0.4161,
-      "samples": 149
-    },
-    {
-      "conditions": [
-        "revenue > 4251.1399",
-        "revenue > 4453.0549",
-        "qty <= 16.5000",
-        "region > 2.5000",
-        "revenue <= 6093.7952"
-      ],
-      "prediction": "lost",
-      "confidence": 0.3889,
-      "samples": 54
-    },
-    {
-      "conditions": [
-        "revenue > 4251.1399",
-        "revenue > 4453.0549",
-        "qty <= 16.5000",
-        "region > 2.5000",
-        "revenue > 6093.7952"
-      ],
-      "prediction": "lost",
-      "confidence": 0.4706,
-      "samples": 34
-    },
-    {
-      "conditions": [
-        "revenue > 4251.1399",
-        "revenue > 4453.0549",
-        "qty > 16.5000",
-        "region <= 2.5000",
-        "revenue <= 5253.3650"
-      ],
-      "prediction": "won",
-      "confidence": 0.6,
-      "samples": 20
-    },
-    {
-      "conditions": [
-        "revenue > 4251.1399",
-        "revenue > 4453.0549",
-        "qty > 16.5000",
-        "region <= 2.5000",
-        "revenue > 5253.3650"
-      ],
-      "prediction": "lost",
-      "confidence": 0.4074,
-      "samples": 27
-    },
-    {
-      "conditions": [
-        "revenue > 4251.1399",
-        "revenue > 4453.0549",
-        "qty > 16.5000",
-        "region > 2.5000"
-      ],
-      "prediction": "won",
-      "confidence": 0.5217,
-      "samples": 23
+      "prediction": "high",
+      "confidence": 1.0,
+      "samples": 264
     }
   ]
 }
